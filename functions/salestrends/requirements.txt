@@ -1,0 +1,11 @@
+# SalesTrendsDashboard — Catalyst function dependencies
+# DO NOT add packages without updating this file AND testing on Catalyst.
+# Pin versions to avoid breakage on redeploy.
+
+fastapi==0.111.0
+mangum==0.17.0
+uvicorn==0.29.0
+pandas==2.2.2
+numpy==1.26.4
+openpyxl==3.1.2
+requests==2.31.0

@@ -1,0 +1,19 @@
+{
+  "project": {
+    "name": "SalesTrendsDashboard",
+    "description": "Bluewud Industries Sales Analytics Dashboard",
+    "domain": "www.zoho.com"
+  },
+  "application": {
+    "type": "web",
+    "stack": "python",
+    "runtime_version": "3.10"
+  },
+  "functions": {
+    "targets": ["salestrends"],
+    "source": "functions",
+    "handler": {
+      "salestrends": "index.handler"
+    }
+  }
+}

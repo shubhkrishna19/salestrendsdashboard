@@ -1,0 +1,37 @@
+# === CREDENTIALS — NEVER COMMIT ===
+.env
+.env.local
+.env.production
+*.pem
+*.key
+
+# === DATA FILES — too large for git, loaded from GitHub at runtime ===
+data.xlsx
+*.xlsx
+*.xls
+*.csv
+
+# === Python ===
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+dist/
+build/
+*.egg-info/
+venv/
+.venv/
+
+# === Catalyst build artifacts ===
+.build/
+catalyst-debug.log
+
+# === OS ===
+.DS_Store
+Thumbs.db
+
+# === Editors ===
+.vscode/
+.idea/
+*.swp

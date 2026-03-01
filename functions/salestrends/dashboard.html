@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Sales Analytics Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root{
+  --bg:#0f1117;--surface:#1a1d27;--surface2:#22263a;--border:#2e3250;
+  --accent:#6c63ff;--accent2:#a78bfa;--text:#e2e8f0;--muted:#94a3b8;
+  --green:#22c55e;--red:#ef4444;--yellow:#f59e0b;--blue:#3b82f6;
+  --radius:12px;--shadow:0 4px 24px rgba(0,0,0,.4);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+
+/* ── Header ── */
+.header{background:linear-gradient(135deg,#1a1d27 0%,#22263a 100%);border-bottom:1px solid var(--border);padding:16px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+.header-left{display:flex;align-items:center;gap:12px}
+.logo{font-size:22px}
+.header h1{font-size:18px;font-weight:700;color:var(--text)}
+.header h1 span{color:var(--accent2);font-weight:400;font-size:13px;margin-left:8px}
+.status-dot{width:8px;height:8px;border-radius:50%;background:var(--green);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+/* ── Filters ── */
+.filters{background:var(--surface);border-bottom:1px solid var(--border);padding:14px 24px;display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
+.filter-group{display:flex;flex-direction:column;gap:4px}
+.filter-group label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+.filter-group select,.filter-group input{background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:8px;font-size:13px;min-width:140px;cursor:pointer}
+.filter-group select:focus,.filter-group input:focus{outline:none;border-color:var(--accent)}
+.filter-group select option{background:var(--surface2)}
+.btn{padding:9px 20px;border-radius:8px;border:none;font-size:13px;font-weight:600;cursor:pointer;transition:all .2s}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:hover{background:#5a50e0}
+.btn-ghost{background:transparent;color:var(--muted);border:1px solid var(--border)}
+.btn-ghost:hover{border-color:var(--accent);color:var(--text)}
+.btn-export{background:var(--green);color:#fff}
+.btn-export:hover{opacity:.85}
+
+/* ── Tabs ── */
+.tabs-bar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 24px;display:flex;gap:0}
+.tab-btn{padding:14px 20px;font-size:13px;font-weight:600;color:var(--muted);border:none;background:none;cursor:pointer;border-bottom:3px solid transparent;transition:all .2s}
+.tab-btn:hover{color:var(--text)}
+.tab-btn.active{color:var(--accent2);border-bottom-color:var(--accent2)}
+
+/* ── Main Layout ── */
+.main{padding:20px 24px;max-width:1600px;margin:0 auto}
+.tab-pane{display:none}
+.tab-pane.active{display:block}
+
+/* ── KPI Cards ── */
+.kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px}
+.kpi-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;position:relative;overflow:hidden}
+.kpi-card::before{content:'';position:absolute;top:0;left:0;width:4px;height:100%;background:var(--accent)}
+.kpi-card.green::before{background:var(--green)}
+.kpi-card.red::before{background:var(--red)}
+.kpi-card.yellow::before{background:var(--yellow)}
+.kpi-card.blue::before{background:var(--blue)}
+.kpi-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+.kpi-value{font-size:26px;font-weight:700;color:var(--text);line-height:1}
+.kpi-sub{font-size:12px;color:var(--muted);margin-top:4px}
+
+/* ── Charts ── */
+.chart-row{display:grid;gap:16px;margin-bottom:16px}
+.chart-row-2{grid-template-columns:1fr 1fr}
+.chart-row-3{grid-template-columns:2fr 1fr}
+.chart-row-1{grid-template-columns:1fr}
+.chart-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px}
+.chart-card h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.chart-card h3 .chip{font-size:10px;background:var(--surface2);color:var(--muted);padding:2px 8px;border-radius:20px;font-weight:400}
+.chart-wrap{position:relative;height:260px}
+.chart-wrap.tall{height:320px}
+.chart-wrap.short{height:200px}
+
+/* ── Table ── */
+.data-table{width:100%;border-collapse:collapse;font-size:12px}
+.data-table th{background:var(--surface2);color:var(--muted);text-align:left;padding:10px 12px;font-weight:600;text-transform:uppercase;font-size:10px;letter-spacing:.5px;border-bottom:1px solid var(--border)}
+.data-table td{padding:10px 12px;border-bottom:1px solid var(--border);color:var(--text)}
+.data-table tr:hover td{background:var(--surface2)}
+.bar-cell{display:flex;align-items:center;gap:8px}
+.mini-bar{height:6px;border-radius:3px;background:var(--accent);min-width:4px;transition:width .4s}
+
+/* ── Return rate badge ── */
+.rate-badge{padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600}
+.rate-low{background:rgba(34,197,94,.15);color:var(--green)}
+.rate-mid{background:rgba(245,158,11,.15);color:var(--yellow)}
+.rate-high{background:rgba(239,68,68,.15);color:var(--red)}
+
+/* ── Loading / Error ── */
+.loading{display:flex;flex-direction:column;align-items:center;justify-content:center;height:200px;color:var(--muted);gap:12px}
+.spinner{width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.error-msg{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:var(--red);padding:12px 16px;border-radius:8px;font-size:13px;margin-bottom:16px;display:none}
+
+/* ── Ops ── */
+.ops-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:20px}
+.ops-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;text-align:center}
+.ops-card .big{font-size:28px;font-weight:700;color:var(--text);margin:8px 0}
+.ops-card .lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+
+/* ── Responsive ── */
+@media(max-width:900px){
+  .kpi-row{grid-template-columns:repeat(2,1fr)}
+  .chart-row-2,.chart-row-3{grid-template-columns:1fr}
+  .ops-grid{grid-template-columns:1fr 1fr}
+  .tab-btn{padding:12px 12px;font-size:12px}
+}
+@media(max-width:560px){
+  .kpi-row{grid-template-columns:1fr 1fr}
+  .filters{flex-direction:column}
+  .filter-group select,.filter-group input{min-width:100%}
+  .ops-grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<!-- ── Header ── -->
+<div class="header">
+  <div class="header-left">
+    <div class="logo">📊</div>
+    <h1>Sales Analytics <span>Bluewud Industries</span></h1>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px">
+    <div class="status-dot" id="statusDot" title="Data status"></div>
+    <span style="font-size:12px;color:var(--muted)" id="statusText">Loading…</span>
+  </div>
+</div>
+
+<!-- ── Filters ── -->
+<div class="filters">
+  <div class="filter-group">
+    <label>Platform</label>
+    <select id="fPlatform"><option value="">All Platforms</option></select>
+  </div>
+  <div class="filter-group">
+    <label>Category</label>
+    <select id="fCategory"><option value="">All Categories</option></select>
+  </div>
+  <div class="filter-group">
+    <label>From</label>
+    <input type="date" id="fStart"/>
+  </div>
+  <div class="filter-group">
+    <label>To</label>
+    <input type="date" id="fEnd"/>
+  </div>
+  <button class="btn btn-primary" onclick="applyFilters()">Apply</button>
+  <button class="btn btn-ghost" onclick="resetFilters()">Reset</button>
+  <button class="btn btn-export" onclick="exportCSV()">⬇ Export CSV</button>
+</div>
+
+<!-- ── Tabs ── -->
+<div class="tabs-bar">
+  <button class="tab-btn active" onclick="switchTab('exec',this)">📈 Executive</button>
+  <button class="tab-btn" onclick="switchTab('sales',this)">🛒 Sales Analysis</button>
+  <button class="tab-btn" onclick="switchTab('returns',this)">↩ Returns</button>
+  <button class="tab-btn" onclick="switchTab('ops',this)">⚙ Operations</button>
+</div>
+
+<div class="main">
+<div id="errorBanner" class="error-msg"></div>
+
+<!-- ════════════ TAB 1: EXECUTIVE SUMMARY ════════════ -->
+<div id="tab-exec" class="tab-pane active">
+
+  <div class="kpi-row">
+    <div class="kpi-card blue">
+      <div class="kpi-label">Total Revenue</div>
+      <div class="kpi-value" id="kRevenue">—</div>
+      <div class="kpi-sub">Net of returns</div>
+    </div>
+    <div class="kpi-card green">
+      <div class="kpi-label">Sales Volume</div>
+      <div class="kpi-value" id="kVolume">—</div>
+      <div class="kpi-sub">Units sold (net)</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Total Orders</div>
+      <div class="kpi-value" id="kOrders">—</div>
+      <div class="kpi-sub">Order lines</div>
+    </div>
+    <div class="kpi-card yellow">
+      <div class="kpi-label">Avg Order Value</div>
+      <div class="kpi-value" id="kAOV">—</div>
+      <div class="kpi-sub">Revenue ÷ Orders</div>
+    </div>
+  </div>
+
+  <div class="chart-row chart-row-1">
+    <div class="chart-card">
+      <h3>Revenue Trend <span class="chip" id="trendFreq">Monthly</span></h3>
+      <div class="chart-wrap"><canvas id="cTrend"></canvas></div>
+    </div>
+  </div>
+
+  <div class="chart-row chart-row-2">
+    <div class="chart-card">
+      <h3>Platform Performance</h3>
+      <div class="chart-wrap"><canvas id="cPlatformExec"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3>Category Distribution</h3>
+      <div class="chart-wrap"><canvas id="cCategoryExec"></canvas></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ════════════ TAB 2: SALES ANALYSIS ════════════ -->
+<div id="tab-sales" class="tab-pane">
+
+  <div class="kpi-row">
+    <div class="kpi-card blue">
+      <div class="kpi-label">Total Revenue</div>
+      <div class="kpi-value" id="sRevenue">—</div>
+    </div>
+    <div class="kpi-card green">
+      <div class="kpi-label">Units Sold</div>
+      <div class="kpi-value" id="sVolume">—</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Orders</div>
+      <div class="kpi-value" id="sOrders">—</div>
+    </div>
+    <div class="kpi-card yellow">
+      <div class="kpi-label">AOV</div>
+      <div class="kpi-value" id="sAOV">—</div>
+    </div>
+  </div>
+
+  <div class="chart-row chart-row-2">
+    <div class="chart-card">
+      <h3>Top 10 Products by Revenue</h3>
+      <div class="chart-wrap tall"><canvas id="cProductsRev"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3>Top 10 Products by Volume</h3>
+      <div class="chart-wrap tall"><canvas id="cProductsVol"></canvas></div>
+    </div>
+  </div>
+
+  <div class="chart-card" style="margin-bottom:16px">
+    <h3>Platform Breakdown</h3>
+    <div id="platformTable"></div>
+  </div>
+
+</div>
+
+<!-- ════════════ TAB 3: RETURNS ════════════ -->
+<div id="tab-returns" class="tab-pane">
+
+  <div class="kpi-row">
+    <div class="kpi-card red">
+      <div class="kpi-label">Total Returns</div>
+      <div class="kpi-value" id="rTotal">—</div>
+      <div class="kpi-sub">Return value</div>
+    </div>
+    <div class="kpi-card yellow">
+      <div class="kpi-label">Return Rate</div>
+      <div class="kpi-value" id="rRate">—</div>
+      <div class="kpi-sub">% of gross revenue</div>
+    </div>
+    <div class="kpi-card green">
+      <div class="kpi-label">Total Revenue</div>
+      <div class="kpi-value" id="rRevenue">—</div>
+      <div class="kpi-sub">Net revenue</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Orders</div>
+      <div class="kpi-value" id="rOrders">—</div>
+    </div>
+  </div>
+
+  <div class="chart-row chart-row-2">
+    <div class="chart-card">
+      <h3>Return Rate Trend</h3>
+      <div class="chart-wrap"><canvas id="cReturnTrend"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3>Returns by Platform</h3>
+      <div class="chart-wrap"><canvas id="cReturnPlatform"></canvas></div>
+    </div>
+  </div>
+
+  <div class="chart-row chart-row-2">
+    <div class="chart-card">
+      <h3>Return Reason Breakdown</h3>
+      <div class="chart-wrap"><canvas id="cReturnReason"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3>Valid vs Invalid Returns</h3>
+      <div class="chart-wrap"><canvas id="cReturnValid"></canvas></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ════════════ TAB 4: OPERATIONS ════════════ -->
+<div id="tab-ops" class="tab-pane">
+
+  <div class="kpi-row">
+    <div class="kpi-card blue">
+      <div class="kpi-label">Total Revenue</div>
+      <div class="kpi-value" id="oRevenue">—</div>
+    </div>
+    <div class="kpi-card yellow">
+      <div class="kpi-label">Tax Collected</div>
+      <div class="kpi-value" id="oTax">—</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Orders</div>
+      <div class="kpi-value" id="oOrders">—</div>
+    </div>
+    <div class="kpi-card green">
+      <div class="kpi-label">Return Rate</div>
+      <div class="kpi-value" id="oRate">—</div>
+    </div>
+  </div>
+
+  <div class="chart-row chart-row-1">
+    <div class="chart-card">
+      <h3>Monthly Order Volume</h3>
+      <div class="chart-wrap"><canvas id="cOpsOrders"></canvas></div>
+    </div>
+  </div>
+
+  <div class="chart-row chart-row-1">
+    <div class="chart-card">
+      <h3>Monthly Revenue vs Returns</h3>
+      <div class="chart-wrap"><canvas id="cOpsRevReturns"></canvas></div>
+    </div>
+  </div>
+
+</div>
+
+</div><!-- /main -->
+
+<script>
+// ── Base URL: detect from current page so it works across all Catalyst environments
+const BASE = window.location.origin + window.location.pathname.replace(/\/$/, '');
+
+// ── State
+let activeFilters = {};
+let charts = {};
+let filterData = {};
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+function fmt(n) {
+  if (n === null || n === undefined || isNaN(n)) return '₹0';
+  const a = Math.abs(n);
+  if (a >= 1e7) return '₹' + (n/1e7).toFixed(2) + 'Cr';
+  if (a >= 1e5) return '₹' + (n/1e5).toFixed(2) + 'L';
+  if (a >= 1e3) return '₹' + (n/1e3).toFixed(1) + 'K';
+  return '₹' + Math.round(n).toLocaleString('en-IN');
+}
+
+function fmtN(n) {
+  if (!n) return '0';
+  if (n >= 1e7) return (n/1e7).toFixed(1) + 'Cr';
+  if (n >= 1e5) return (n/1e5).toFixed(1) + 'L';
+  if (n >= 1e3) return (n/1e3).toFixed(1) + 'K';
+  return Math.round(n).toLocaleString('en-IN');
+}
+
+function rateBadge(r) {
+  const cls = r < 5 ? 'rate-low' : r < 15 ? 'rate-mid' : 'rate-high';
+  return `<span class="rate-badge ${cls}">${r.toFixed(1)}%</span>`;
+}
+
+function q() {
+  const p = new URLSearchParams();
+  const f = activeFilters;
+  if (f.platform)   p.set('platform',   f.platform);
+  if (f.category)   p.set('category',   f.category);
+  if (f.start_date) p.set('start_date', f.start_date);
+  if (f.end_date)   p.set('end_date',   f.end_date);
+  return p.toString() ? '?' + p.toString() : '';
+}
+
+async function api(path) {
+  const r = await fetch(BASE + path + q());
+  if (!r.ok) throw new Error(`API ${path} → ${r.status}`);
+  return r.json();
+}
+
+function mkChart(id, cfg) {
+  if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+  const ctx = document.getElementById(id)?.getContext('2d');
+  if (!ctx) return;
+  charts[id] = new Chart(ctx, cfg);
+}
+
+function chartDefaults() {
+  Chart.defaults.color = '#94a3b8';
+  Chart.defaults.font.family = '-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';
+  Chart.defaults.font.size = 11;
+}
+
+const PALETTE = ['#6c63ff','#a78bfa','#3b82f6','#22c55e','#f59e0b','#ef4444','#ec4899','#14b8a6','#f97316','#8b5cf6'];
+
+// ── Tab switching ────────────────────────────────────────────────────────────
+
+function switchTab(id, btn) {
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + id).classList.add('active');
+  btn.classList.add('active');
+  loadTab(id);
+}
+
+// ── Filters ──────────────────────────────────────────────────────────────────
+
+async function loadFilters() {
+  try {
+    filterData = await api('/api/filters');
+    const pSel = document.getElementById('fPlatform');
+    const cSel = document.getElementById('fCategory');
+    (filterData.platforms  || []).forEach(p => { const o = new Option(p,p); pSel.add(o); });
+    (filterData.categories || []).forEach(c => { const o = new Option(c,c); cSel.add(o); });
+    if (filterData.date_range) {
+      document.getElementById('fStart').value = filterData.date_range.min;
+      document.getElementById('fEnd').value   = filterData.date_range.max;
+      activeFilters.start_date = filterData.date_range.min;
+      activeFilters.end_date   = filterData.date_range.max;
+    }
+  } catch(e) { showError('Failed to load filter options: ' + e.message); }
+}
+
+function applyFilters() {
+  activeFilters.platform   = document.getElementById('fPlatform').value || '';
+  activeFilters.category   = document.getElementById('fCategory').value || '';
+  activeFilters.start_date = document.getElementById('fStart').value || '';
+  activeFilters.end_date   = document.getElementById('fEnd').value || '';
+  loadCurrentTab();
+}
+
+function resetFilters() {
+  document.getElementById('fPlatform').value = '';
+  document.getElementById('fCategory').value = '';
+  if (filterData.date_range) {
+    document.getElementById('fStart').value = filterData.date_range.min;
+    document.getElementById('fEnd').value   = filterData.date_range.max;
+    activeFilters.start_date = filterData.date_range.min;
+    activeFilters.end_date   = filterData.date_range.max;
+  }
+  activeFilters.platform = '';
+  activeFilters.category = '';
+  loadCurrentTab();
+}
+
+function loadCurrentTab() {
+  const active = document.querySelector('.tab-pane.active');
+  if (!active) return;
+  const id = active.id.replace('tab-', '');
+  loadTab(id);
+}
+
+// ── CSV Export ────────────────────────────────────────────────────────────────
+
+async function exportCSV() {
+  try {
+    const r = await fetch(BASE + '/api/export' + q());
+    const blob = await r.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'sales_export_' + new Date().toISOString().slice(0,10) + '.csv';
+    a.click();
+  } catch(e) { showError('Export failed: ' + e.message); }
+}
+
+// ── Error banner ──────────────────────────────────────────────────────────────
+
+function showError(msg) {
+  const b = document.getElementById('errorBanner');
+  b.textContent = '⚠ ' + msg;
+  b.style.display = 'block';
+  setTimeout(() => { b.style.display = 'none'; }, 8000);
+}
+
+// ── Tab loaders ───────────────────────────────────────────────────────────────
+
+function loadTab(id) {
+  if (id === 'exec')    loadExec();
+  if (id === 'sales')   loadSales();
+  if (id === 'returns') loadReturns();
+  if (id === 'ops')     loadOps();
+}
+
+// ─────────── EXECUTIVE ───────────
+
+async function loadExec() {
+  try {
+    const [kpis, trend, platforms, categories] = await Promise.all([
+      api('/api/kpis'), api('/api/trend'), api('/api/platforms'), api('/api/categories')
+    ]);
+    setKPI('kRevenue', kpis.total_revenue_formatted);
+    setKPI('kVolume',  fmtN(kpis.sales_volume));
+    setKPI('kOrders',  fmtN(kpis.total_orders));
+    setKPI('kAOV',     kpis.aov_formatted);
+    drawTrend(trend);
+    drawPlatformBar('cPlatformExec', platforms);
+    drawCategoryDoughnut('cCategoryExec', categories);
+  } catch(e) { showError('Executive tab error: ' + e.message); }
+}
+
+function setKPI(id, val) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = val ?? '—';
+}
+
+function drawTrend(data) {
+  if (!data.length) return;
+  const freq = data.length <= 45 ? 'Daily' : data.length <= 25 ? 'Weekly' : 'Monthly';
+  const chip = document.getElementById('trendFreq');
+  if (chip) chip.textContent = freq;
+  mkChart('cTrend', {
+    type: 'line',
+    data: {
+      labels: data.map(d => d.date),
+      datasets: [{
+        label: 'Net Revenue',
+        data: data.map(d => d.revenue),
+        borderColor: '#6c63ff',
+        backgroundColor: 'rgba(108,99,255,.12)',
+        fill: true, tension: 0.4, pointRadius: 3, pointHoverRadius: 6,
+        borderWidth: 2
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { color: '#2e3250' }, ticks: { maxTicksLimit: 12 } },
+        y: { grid: { color: '#2e3250' }, ticks: { callback: v => fmt(v) } }
+      }
+    }
+  });
+}
+
+function drawPlatformBar(id, data) {
+  if (!data.length) return;
+  mkChart(id, {
+    type: 'bar',
+    data: {
+      labels: data.map(d => d.platform),
+      datasets: [{
+        label: 'Revenue',
+        data: data.map(d => d.revenue),
+        backgroundColor: data.map(d => d.color || '#6c63ff'),
+        borderRadius: 6,
+      }]
+    },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { color: '#2e3250' }, ticks: { callback: v => fmt(v) } },
+        y: { grid: { display: false } }
+      }
+    }
+  });
+}
+
+function drawCategoryDoughnut(id, data) {
+  if (!data.length) return;
+  mkChart(id, {
+    type: 'doughnut',
+    data: {
+      labels: data.map(d => d.category),
+      datasets: [{ data: data.map(d => d.revenue), backgroundColor: PALETTE, borderWidth: 2, borderColor: '#1a1d27' }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '60%',
+      plugins: {
+        legend: { position: 'right', labels: { boxWidth: 12, padding: 10, font: { size: 11 } } },
+        tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${fmt(ctx.raw)}` } }
+      }
+    }
+  });
+}
+
+// ─────────── SALES ANALYSIS ───────────
+
+async function loadSales() {
+  try {
+    const [kpis, prodRev, prodVol, platforms] = await Promise.all([
+      api('/api/kpis'), api('/api/products?n=10'), api('/api/products/volume?n=10'), api('/api/platforms')
+    ]);
+    setKPI('sRevenue', kpis.total_revenue_formatted);
+    setKPI('sVolume',  fmtN(kpis.sales_volume));
+    setKPI('sOrders',  fmtN(kpis.total_orders));
+    setKPI('sAOV',     kpis.aov_formatted);
+    drawHBar('cProductsRev', prodRev.map(p => p.product), prodRev.map(p => p.revenue), '#6c63ff', v => fmt(v));
+    drawHBar('cProductsVol', prodVol.map(p => p.product), prodVol.map(p => p.quantity), '#22c55e', v => fmtN(v));
+    drawPlatformTable(platforms);
+  } catch(e) { showError('Sales tab error: ' + e.message); }
+}
+
+function drawHBar(id, labels, values, color, fmtFn) {
+  const shortLabels = labels.map(l => l.length > 28 ? l.substring(0,26)+'…' : l);
+  mkChart(id, {
+    type: 'bar',
+    data: {
+      labels: shortLabels,
+      datasets: [{ data: values, backgroundColor: color, borderRadius: 4 }]
+    },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { color: '#2e3250' }, ticks: { callback: v => fmtFn(v) } },
+        y: { grid: { display: false }, ticks: { font: { size: 10 } } }
+      }
+    }
+  });
+}
+
+function drawPlatformTable(data) {
+  const maxRev = Math.max(...data.map(d => d.revenue), 1);
+  const rows = data.map(d => `
+    <tr>
+      <td><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${d.color};margin-right:6px"></span>${d.platform}</td>
+      <td>
+        <div class="bar-cell">
+          <div class="mini-bar" style="width:${Math.max(4,(d.revenue/maxRev)*140).toFixed(0)}px;background:${d.color}"></div>
+          ${fmt(d.revenue)}
+        </div>
+      </td>
+      <td>${fmtN(d.quantity)}</td>
+      <td>${fmtN(d.orders)}</td>
+      <td>${fmt(d.aov)}</td>
+      <td>${rateBadge(d.return_rate)}</td>
+    </tr>`).join('');
+  document.getElementById('platformTable').innerHTML = `
+    <table class="data-table">
+      <thead><tr><th>Platform</th><th>Revenue</th><th>Units</th><th>Orders</th><th>AOV</th><th>Return %</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+// ─────────── RETURNS ───────────
+
+async function loadReturns() {
+  try {
+    const [kpis, trend, byPlat, byReason, validity] = await Promise.all([
+      api('/api/kpis'),
+      api('/api/returns/trend'),
+      api('/api/returns/by-platform'),
+      api('/api/returns/by-reason'),
+      api('/api/returns/validity'),
+    ]);
+    setKPI('rTotal',   kpis.total_returns_formatted);
+    setKPI('rRate',    kpis.return_rate + '%');
+    setKPI('rRevenue', kpis.total_revenue_formatted);
+    setKPI('rOrders',  fmtN(kpis.total_orders));
+    drawReturnTrend(trend);
+    drawReturnPlatform(byPlat);
+    drawReturnReason(byReason);
+    drawReturnValidity(validity);
+  } catch(e) { showError('Returns tab error: ' + e.message); }
+}
+
+function drawReturnTrend(data) {
+  mkChart('cReturnTrend', {
+    type: 'line',
+    data: {
+      labels: data.map(d => d.month),
+      datasets: [
+        { label: 'Return Rate %', data: data.map(d => d.rate), borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,.1)', fill: true, tension: 0.4, yAxisID: 'yRate' },
+        { label: 'Returns ₹',    data: data.map(d => d.returns), borderColor: '#f59e0b', tension: 0.4, yAxisID: 'yVal' }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { boxWidth: 12 } } },
+      scales: {
+        x: { grid: { color: '#2e3250' } },
+        yRate: { position: 'left',  grid: { color: '#2e3250' }, ticks: { callback: v => v + '%' } },
+        yVal:  { position: 'right', grid: { display: false },   ticks: { callback: v => fmt(v) } }
+      }
+    }
+  });
+}
+
+function drawReturnPlatform(data) {
+  mkChart('cReturnPlatform', {
+    type: 'bar',
+    data: {
+      labels: data.map(d => d.platform),
+      datasets: [{ label: 'Returns', data: data.map(d => d.returns), backgroundColor: '#ef4444', borderRadius: 4 }]
+    },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { color: '#2e3250' }, ticks: { callback: v => fmt(v) } },
+        y: { grid: { display: false } }
+      }
+    }
+  });
+}
+
+function drawReturnReason(data) {
+  if (!data.length) return;
+  mkChart('cReturnReason', {
+    type: 'doughnut',
+    data: {
+      labels: data.map(d => d.reason || 'Unknown'),
+      datasets: [{ data: data.map(d => d.amount), backgroundColor: PALETTE, borderWidth: 2, borderColor: '#1a1d27' }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '55%',
+      plugins: { legend: { position: 'right', labels: { boxWidth: 12, font: { size: 10 } } } }
+    }
+  });
+}
+
+function drawReturnValidity(data) {
+  mkChart('cReturnValid', {
+    type: 'pie',
+    data: {
+      labels: data.map(d => d.validity || 'Unknown'),
+      datasets: [{ data: data.map(d => d.amount), backgroundColor: ['#22c55e','#ef4444','#f59e0b'], borderWidth: 2, borderColor: '#1a1d27' }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'right', labels: { boxWidth: 12 } } }
+    }
+  });
+}
+
+// ─────────── OPERATIONS ───────────
+
+async function loadOps() {
+  try {
+    const [kpis, ops, retTrend] = await Promise.all([
+      api('/api/kpis'), api('/api/operations'), api('/api/returns/trend')
+    ]);
+    setKPI('oRevenue', kpis.total_revenue_formatted);
+    setKPI('oTax',     ops.tax_collected_formatted || '₹0');
+    setKPI('oOrders',  fmtN(kpis.total_orders));
+    setKPI('oRate',    kpis.return_rate + '%');
+    drawOpsOrders(ops.orders_per_month || []);
+    drawOpsRevReturns(retTrend);
+  } catch(e) { showError('Operations tab error: ' + e.message); }
+}
+
+function drawOpsOrders(data) {
+  mkChart('cOpsOrders', {
+    type: 'bar',
+    data: {
+      labels: data.map(d => d.month),
+      datasets: [{ label: 'Orders', data: data.map(d => d.orders), backgroundColor: '#6c63ff', borderRadius: 4 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { color: '#2e3250' } },
+        y: { grid: { color: '#2e3250' } }
+      }
+    }
+  });
+}
+
+function drawOpsRevReturns(data) {
+  mkChart('cOpsRevReturns', {
+    type: 'bar',
+    data: {
+      labels: data.map(d => d.month),
+      datasets: [
+        { label: 'Revenue', data: data.map(d => d.revenue), backgroundColor: '#22c55e', borderRadius: 4 },
+        { label: 'Returns', data: data.map(d => d.returns), backgroundColor: '#ef4444', borderRadius: 4 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { boxWidth: 12 } } },
+      scales: {
+        x: { grid: { color: '#2e3250' } },
+        y: { grid: { color: '#2e3250' }, ticks: { callback: v => fmt(v) }, stacked: false }
+      }
+    }
+  });
+}
+
+// ── Health check ──────────────────────────────────────────────────────────────
+
+async function checkHealth() {
+  try {
+    const h = await api('/api/health');
+    const dot  = document.getElementById('statusDot');
+    const text = document.getElementById('statusText');
+    if (h.data_loaded) {
+      dot.style.background  = '#22c55e';
+      text.textContent = `${fmtN(h.rows)} rows loaded`;
+    } else {
+      dot.style.background  = '#ef4444';
+      text.textContent = 'Data not loaded';
+    }
+  } catch { /* silent */ }
+}
+
+// ── Boot ─────────────────────────────────────────────────────────────────────
+
+async function boot() {
+  chartDefaults();
+  await checkHealth();
+  await loadFilters();
+  await loadExec();
+}
+
+window.addEventListener('DOMContentLoaded', boot);
+</script>
+</body>
+</html>
