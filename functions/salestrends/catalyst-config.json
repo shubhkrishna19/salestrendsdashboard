@@ -1,0 +1,5 @@
+{
+  "function_name": "salestrends",
+  "runtime": "python",
+  "handler": "app_api.handler"
+}
