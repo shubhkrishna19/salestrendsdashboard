@@ -16,6 +16,7 @@ import os
 import io
 import json
 import logging
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, List, Dict, Any
@@ -156,11 +157,32 @@ class DataManager:
             url = f"https://raw.githubusercontent.com/{GITHUB_REPO}/{branch}/{DATA_FILE}"
             headers = {"Authorization": f"token {GITHUB_TOKEN}"}
             log.info(f"Downloading from GitHub: {url}")
-            resp = http_requests.get(url, headers=headers, timeout=120)
-            resp.raise_for_status()
-            df = pd.read_excel(io.BytesIO(resp.content), sheet_name=SHEET_NAME)
-            log.info(f"GitHub load success: {len(df)} rows")
-            return df
+            
+            # Rate limit handling - retry with exponential backoff
+            max_retries = 3
+            retry_delay = 5  # seconds
+            for attempt in range(max_retries):
+                resp = http_requests.get(url, headers=headers, timeout=120)
+                
+                if resp.status_code == 200:
+                    df = pd.read_excel(io.BytesIO(resp.content), sheet_name=SHEET_NAME)
+                    log.info(f"GitHub load success: {len(df)} rows")
+                    return df
+                elif resp.status_code == 429:
+                    # Rate limited - wait and retry
+                    log.warning(f"GitHub API rate limited. Attempt {attempt + 1}/{max_retries}. Waiting {retry_delay}s...")
+                    time.sleep(retry_delay)
+                    retry_delay *= 2  # Exponential backoff
+                else:
+                    resp.raise_for_status()
+            
+            # All retries exhausted
+            log.error(f"GitHub API rate limit exceeded after {max_retries} attempts")
+            return None
+            
+        except http_requests.exceptions.RequestException as e:
+            log.warning(f"GitHub load failed: {e}")
+            return None
         except Exception as e:
             log.warning(f"GitHub load failed: {e}")
             return None
@@ -464,6 +486,44 @@ class DataManager:
 _dm = DataManager()
 
 # ============================================================================
+# CACHE LAYER — in-memory cache for filtered results
+# ============================================================================
+
+class CacheManager:
+    """Simple in-memory cache for API responses."""
+    
+    def __init__(self, ttl_seconds: int = 300):  # 5 minutes default TTL
+        self._cache: Dict[str, tuple] = {}  # key -> (result, timestamp)
+        self._ttl = ttl_seconds
+    
+    def _make_key(self, endpoint: str, params: Dict) -> str:
+        """Generate cache key from endpoint and params."""
+        sorted_params = sorted(params.items())
+        return f"{endpoint}:{json.dumps(sorted_params)}"
+    
+    def get(self, endpoint: str, params: Dict) -> Optional[Any]:
+        """Get cached result if still valid."""
+        key = self._make_key(endpoint, params)
+        if key in self._cache:
+            result, timestamp = self._cache[key]
+            if time.time() - timestamp < self._ttl:
+                return result
+            else:
+                del self._cache[key]
+        return None
+    
+    def set(self, endpoint: str, params: Dict, result: Any):
+        """Cache a result."""
+        key = self._make_key(endpoint, params)
+        self._cache[key] = (result, time.time())
+    
+    def clear(self):
+        """Clear all cache."""
+        self._cache.clear()
+
+_cache = CacheManager(ttl_seconds=300)
+
+# ============================================================================
 # FASTAPI APPLICATION
 # ============================================================================
 
@@ -498,7 +558,15 @@ async def health():
         "data_loaded": _dm.ready,
         "rows": len(_dm._df) if _dm.ready else 0,
         "loaded_at": _dm._loaded_at.isoformat() if _dm._loaded_at else None,
+        "cache_entries": len(_cache._cache),
+        "cache_ttl_seconds": _cache._ttl,
     }
+
+@app.post("/api/cache/clear")
+async def clear_cache():
+    """Manually clear the cache to force fresh data."""
+    _cache.clear()
+    return {"status": "ok", "message": "Cache cleared"}
 
 @app.get("/api/filters")
 async def get_filters():
@@ -516,8 +584,19 @@ async def get_kpis(
     end_date:   Optional[str] = None,
     product:    Optional[str] = None,
 ):
+    params = {"platform": platform, "category": category, "start_date": start_date, "end_date": end_date, "product": product}
+    
+    # Check cache first
+    cached = _cache.get("kpis", params)
+    if cached is not None:
+        return cached
+    
     df = _dm.apply_filters(_parse_filters(platform, category, start_date, end_date, product))
-    return _dm.kpis(df)
+    result = _dm.kpis(df)
+    
+    # Cache the result
+    _cache.set("kpis", params, result)
+    return result
 
 # ------------------------------------------------------------------
 # Executive Summary
@@ -529,8 +608,17 @@ async def get_trend(
     start_date: Optional[str]=None, end_date: Optional[str]=None,
     product: Optional[str]=None,
 ):
+    params = {"platform": platform, "category": category, "start_date": start_date, "end_date": end_date, "product": product}
+    
+    cached = _cache.get("trend", params)
+    if cached is not None:
+        return cached
+    
     df = _dm.apply_filters(_parse_filters(platform, category, start_date, end_date, product))
-    return _dm.revenue_trend(df)
+    result = _dm.revenue_trend(df)
+    
+    _cache.set("trend", params, result)
+    return result
 
 @app.get("/api/platforms")
 async def get_platforms(
@@ -538,8 +626,17 @@ async def get_platforms(
     start_date: Optional[str]=None, end_date: Optional[str]=None,
     product: Optional[str]=None,
 ):
+    params = {"platform": platform, "category": category, "start_date": start_date, "end_date": end_date, "product": product}
+    
+    cached = _cache.get("platforms", params)
+    if cached is not None:
+        return cached
+    
     df = _dm.apply_filters(_parse_filters(platform, category, start_date, end_date, product))
-    return _dm.platform_data(df)
+    result = _dm.platform_data(df)
+    
+    _cache.set("platforms", params, result)
+    return result
 
 @app.get("/api/categories")
 async def get_categories(
