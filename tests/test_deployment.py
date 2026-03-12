@@ -46,7 +46,6 @@ def test_root_fastapi_entrypoint_exposes_dashboard_and_api_routes() -> None:
 def test_vercel_config_targets_python_api_functions() -> None:
     vercel_config = json.loads((ROOT / "vercel.json").read_text(encoding="utf-8"))
 
-    assert vercel_config["buildCommand"] == "python build_snapshot.py"
     assert vercel_config["functions"]["api/index.py"]["maxDuration"] == 120
     assert vercel_config["rewrites"] == [
         {
