@@ -11,7 +11,12 @@
   "appsail": [
     {
       "name": "salestrends-dashboard",
-      "source": "."
+      "source": "docker-archive://dist/appsail-image.tar",
+      "command": "python appsail_main.py",
+      "memory": 1024,
+      "port": {
+        "http": 9000
+      }
     }
   ]
 }

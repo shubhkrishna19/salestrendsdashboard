@@ -10,6 +10,8 @@ data.xlsx
 *.xlsx
 *.xls
 *.csv
+*.csv.gz
+functions/salestrends/snapshot_meta.json
 
 # === Python ===
 __pycache__/
@@ -35,3 +37,5 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+.vercel
+.env*.local

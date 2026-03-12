@@ -1,175 +1,198 @@
 # SalesTrendsDashboard
 
-Sales analytics dashboard for Bluewud Industries.
-Deployed as a Zoho Catalyst Advanced I/O serverless function (Python 3.10).
+Internal sales analytics dashboard for Bluewud. The app reads the `Final Sale Data` sheet from a workbook, normalizes the data into a stable analytics model, and serves a FastAPI dashboard with snapshot-backed runtime performance.
 
----
+## What is fixed
 
-## Architecture
+- Return math now uses signed return rows correctly.
+- Unique-order metrics no longer count blank order IDs.
+- Broken dashboard sections now have working API payloads behind them.
+- Workbook ingestion supports local files, public Google Drive links, and SharePoint or OneDrive download links.
+- Snapshot generation avoids re-parsing the workbook on every cold start.
+- The repo now includes automated regression tests for data math, endpoint contracts, and reload behavior.
 
-```
-Browser
-  └── GET /server/salestrends/           → dashboard.html (served by FastAPI)
-  └── GET /server/salestrends/api/kpis   → FastAPI endpoint → Pandas aggregation
-  └── GET /server/salestrends/api/trend  → FastAPI endpoint → Pandas aggregation
-  └── ...
+## Current baseline
 
-Catalyst Runtime
-  └── Invokes index.handler (Mangum)
-  └── Mangum translates Catalyst event → ASGI → FastAPI
-  └── DataManager loads Excel from GitHub once per warm instance
-```
+Verified against the current local workbook:
 
----
+- Rows: `151770`
+- Unique orders: `107748`
+- Gross sales: `397286879`
+- Return value: `59496957`
+- Net revenue: `337789922`
+- Value return rate: `14.98%`
+- Quantity return rate: `3.86%`
 
-## Local Development
+## Project structure
 
-### Prerequisites
-- Python 3.10+
-- pip
-- Access to the private GitHub repo containing `data.xlsx`
+- `functions/salestrends/app_api.py`: FastAPI backend, loaders, snapshot handling, analytics
+- `functions/salestrends/dashboard.html`: dashboard shell and client-side rendering
+- `app.py`: Vercel entry point
+- `build_snapshot.py`: build-time snapshot refresh
+- `scripts/verify.ps1`: local production-readiness verification
+- `scripts/verify_deployments.py`: deployment smoke verification for Vercel config and Catalyst AppSail boot
+- `scripts/build_appsail_image.py`: build a custom AppSail Docker archive for production deploys
+- `tests/test_app_api.py`: regression suite
 
-### Setup
+## Data flow
 
-```bash
-# 1. Clone the repo
-git clone https://github.com/shubhkrishna19/salestrendsdashboard
-cd salestrendsdashboard
+1. Load the workbook from an explicit URL, configured `DATA_URL`, GitHub fallback, or local workbook.
+2. Normalize the raw sheet into stable analytics columns.
+3. Write a compressed snapshot to `functions/salestrends/data_snapshot.csv.gz`.
+4. Serve dashboard and API requests from the snapshot-backed dataframe.
 
-# 2. Create virtual environment
-python -m venv venv
-source venv/bin/activate   # Windows: venv\Scripts\activate
+Snapshot artifacts are generated runtime files and are ignored by git.
 
-# 3. Install dependencies
-pip install -r functions/salestrends/requirements.txt
+## Local setup
 
-# 4. Set environment variables
-cp .env.example .env
-# Edit .env — add your GITHUB_TOKEN and GITHUB_REPO
-
-# 5. Run locally
-cd functions/salestrends
-uvicorn app_api:app --reload --port 8000
-
-# 6. Open browser
-# http://localhost:8000
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+python -m pip install -r requirements-dev.txt
+Copy-Item .env.example .env
 ```
 
-### Verify it's working
+Edit `.env` and set `DATA_URL` if you want to load from a public workbook link instead of the local `data.xlsx`.
 
-```bash
-curl http://localhost:8000/api/health
-# Expected: {"status":"ok","data_loaded":true,"rows":XXXXX,...}
+## Local run
+
+```powershell
+python build_snapshot.py
+python -m uvicorn app:app --reload --port 8000
 ```
 
-If `data_loaded` is `false`, check your `.env` values.
+Open `http://127.0.0.1:8000`.
 
----
+## Verification workflow
 
-## Catalyst Deployment
+Run the full local verification pass:
 
-### First-time setup (one per machine)
-
-```bash
-npm install -g @zohocloud/catalyst-cli
-catalyst login
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\verify.ps1
 ```
 
-### Link to existing Catalyst project
+This does four things:
 
-```bash
-# From the SalesTrendsDashboard root directory
-catalyst init
-# Select existing project: SalesTrendsDashboard
-# This updates .catalystrc with your project ID
+1. Compiles the Python entry points.
+2. Checks the inline dashboard JavaScript syntax when Node is available.
+3. Rebuilds the snapshot from the current source.
+4. Runs the automated test suite.
+
+Run the deployment verification pass:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\verify_deployments.ps1
 ```
 
-### Set environment variables in Catalyst console
+This verifies:
 
-Go to: **Catalyst Console → SalesTrendsDashboard → Functions → salestrends → Environment Variables**
+1. Snapshot rebuild and AppSail bundle packaging.
+2. Vercel deployment config integrity.
+3. Catalyst AppSail local proxy boot.
+4. Direct AppSail entry-point boot against the packaged bundle.
+5. Custom AppSail image assets and config presence.
 
-Add:
-| Key | Value |
-|-----|-------|
-| `GITHUB_TOKEN` | Your GitHub PAT (repo:read scope) |
-| `GITHUB_REPO` | `shubhkrishna19/salestrendsdashboard` |
-| `DATA_FILE` | `data.xlsx` |
-| `SHEET_NAME` | `Final Sale Data` |
+## Environment variables
 
-### Deploy
+Primary runtime configuration:
 
-```bash
-# From project root
-catalyst deploy --only functions:salestrends
+- `DATA_URL`: public Google Drive, SharePoint, OneDrive, or direct workbook URL
+- `SHEET_NAME`: defaults to `Final Sale Data`
+- `SUMMARY_SHEET_NAME`: defaults to `Sales Analytics Dashboard`
 
-# Watch logs
-catalyst logs --function salestrends --tail
-```
+Optional fallback configuration:
 
-### Verify deployment
+- `GITHUB_TOKEN`: read token for a private GitHub workbook source
+- `GITHUB_REPO`: repo path like `owner/repo`
+- `DATA_FILE`: workbook name, defaults to `data.xlsx`
 
-```bash
-# Replace with your actual Catalyst URL
-curl https://YOUR-PROJECT-ID.catalystserverless.com/server/salestrends/api/health
-```
+Optional snapshot overrides:
 
----
+- `SNAPSHOT_FILE`
+- `SNAPSHOT_META_FILE`
 
-## Updating the Data
+## Recommended stack
 
-The dashboard reads `data.xlsx` from the GitHub repo on every cold start.
+For long-term use and future consolidation into a larger internal platform, the recommended stack is:
 
-To update the data:
-1. Replace `data.xlsx` in the GitHub repo (same sheet name: `Final Sale Data`)
-2. Catalyst functions will pick up the new data on their next cold start
-3. To force refresh: redeploy the function or wait for the instance to cycle
+- FastAPI backend with snapshot-backed pandas analytics
+- Vercel preview deployments on Python `3.12`
+- Zoho AppSail production deploys via a custom Linux AMD64 container image on Python `3.12`
 
----
+Why this is the better long-term choice:
 
-## API Reference
+- Vercel officially supports Python `3.12`, `3.13`, and `3.14`, and `3.12` is the safest stable target for scientific wheels.
+- Zoho managed AppSail is still capped at `python_3_9`, which blocks the current analytics dependency stack.
+- A custom AppSail container keeps the same runtime, dependency set, and app behavior between pre-production and Zoho production.
 
-| Endpoint | Description |
-|----------|------------|
-| `GET /` | Dashboard HTML |
-| `GET /api/health` | Health check, data load status |
-| `GET /api/filters` | Available platforms, categories, date range |
-| `GET /api/kpis` | Revenue, volume, orders, AOV, return rate |
-| `GET /api/trend` | Revenue trend over time |
-| `GET /api/platforms` | Platform aggregation |
-| `GET /api/categories` | Category aggregation |
-| `GET /api/products?n=10` | Top N products by revenue |
-| `GET /api/products/volume?n=10` | Top N products by volume |
-| `GET /api/returns/trend` | Return rate trend |
-| `GET /api/returns/by-platform` | Returns broken down by platform |
-| `GET /api/returns/by-reason` | Returns by return reason |
-| `GET /api/returns/validity` | Valid vs invalid returns |
-| `GET /api/operations` | Monthly orders, tax summary |
-| `GET /api/export` | Download filtered data as CSV |
+## Vercel deployment
 
-All endpoints accept optional query params: `platform`, `category`, `start_date`, `end_date`.
+Vercel is the first deployment target for verification.
 
----
+1. Set `DATA_URL` in the Vercel project environment variables.
+2. Keep `vercel.json` as-is so the build step runs `python build_snapshot.py`.
+3. Deploy the repo.
+4. Validate:
+   - `/api/health`
+   - `/api/dashboard`
+   - filter changes
+   - export flow
 
-## Troubleshooting
+Why this works:
 
-**Data not loading on Catalyst**
-→ Check environment variables in Catalyst console
-→ Run `catalyst logs --function salestrends` and look for "Loading from GitHub"
+- `app.py` exposes the FastAPI app for Vercel's Python runtime.
+- `build_snapshot.py` refreshes the snapshot during build so runtime requests do not need to parse the workbook.
+- `vercel.json` sets `maxDuration` to `120` seconds for the app function.
 
-**500 error on cold start**
-→ Usually a missing package — check `requirements.txt` has all dependencies
-→ Check `catalyst logs` for the exact ImportError
+Windows note:
 
-**Charts blank after filter**
-→ The filter combination returned zero rows — widen your date range or remove a filter
+- `vercel dev` and `vercel build` are not reliable local runtime checks on this machine because the Windows Vercel Python shim is failing before app startup.
+- The repo now verifies the Vercel entry point and config in tests, but the final Vercel gate is still a real preview deployment.
 
-**Deployment fails**
-→ Run `catalyst deploy --verbose` for detailed output
-→ Ensure `.catalystrc` has the correct project ID
+## Zoho Catalyst and Zoho Creator path
 
----
+This repo still contains the legacy Catalyst function entry point for compatibility, but raw workbook parsing is not the recommended production path on Catalyst.
 
-## Project Rules
+Recommended path:
 
-See `CLAUDE.md` for AI agent rules and `PROJECT_IDENTITY.md` for the locked project spec.
-Never commit credentials. Never hardcode API keys. Always test locally before deploying.
+1. Verify on Vercel first.
+2. Move the same FastAPI app to Catalyst AppSail.
+3. Bind the server to `X_ZOHO_CATALYST_LISTEN_PORT`.
+4. Keep the snapshot workflow so AppSail serves preprocessed data rather than parsing the workbook per request.
+5. Embed the verified internal app into Zoho Creator or the company portal only after the AppSail build is stable.
+
+Why AppSail is preferred:
+
+- The workbook is heavy.
+- Catalyst request limits are tighter than Vercel.
+- Snapshot-backed startup is safer than request-time workbook parsing.
+
+## Zoho AppSail custom runtime path
+
+The production path should use a custom AppSail image, not the managed `python_3_9` runtime.
+
+Preparation steps already in this repo:
+
+1. `python scripts/package_appsail.py`
+2. `python scripts/build_appsail_image.py`
+3. Use `catalyst.custom-runtime.example.json` as the production Catalyst config shape.
+4. Deploy the generated `docker-archive://dist/appsail-image.tar` target to AppSail.
+
+Why this is the right Zoho path:
+
+- The image ships with the prebuilt snapshot, so cold start does not depend on parsing the workbook.
+- The runtime matches the Vercel validation path more closely.
+- Future internal apps can share a container-first deployment standard instead of being forced onto Zoho's older managed runtime.
+
+Current local limitation:
+
+- This machine does not have Docker installed, so the custom AppSail image build cannot be smoke-tested here yet.
+- The repo includes the container build scripts, Dockerfile, and config template, but the final custom-runtime verification requires Docker or a CI runner with Docker.
+
+## Operational rules
+
+- Do not commit workbook links with credentials.
+- Do not commit `.env`.
+- Do not commit generated snapshot artifacts unless explicitly approved.
+- Use `python -m pytest -q` after backend edits.
+- Use `python build_snapshot.py` after data-loader changes.
