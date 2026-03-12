@@ -1,11 +1,11 @@
 $ErrorActionPreference = "Stop"
 
 Write-Host "Compiling Python entry points..."
-python -m py_compile app.py appsail_main.py build_snapshot.py api\index.py functions\salestrends\app_api.py functions\salestrends\index.py scripts\package_appsail.py scripts\build_appsail_image.py scripts\verify_deployments.py
+python -m py_compile app.py appsail_main.py build_snapshot.py functions\salestrends\app_api.py functions\salestrends\index.py scripts\package_appsail.py scripts\build_appsail_image.py scripts\verify_deployments.py
 
 if (Get-Command py -ErrorAction SilentlyContinue) {
   try {
-    py -3.9 -m py_compile app.py appsail_main.py build_snapshot.py api\index.py functions\salestrends\app_api.py functions\salestrends\index.py
+    py -3.9 -m py_compile app.py appsail_main.py build_snapshot.py functions\salestrends\app_api.py functions\salestrends\index.py
     Write-Host "Validated Catalyst runtime entry points with Python 3.9 syntax."
   }
   catch {

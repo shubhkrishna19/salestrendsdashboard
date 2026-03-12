@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import sys
 from pathlib import Path
 
@@ -9,15 +8,10 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from api.index import app as vercel_app
 import app as root_app
 import appsail_main
 from scripts import build_appsail_image
 from scripts import package_appsail
-
-
-def test_vercel_entrypoint_uses_root_app() -> None:
-    assert vercel_app is root_app.app
 
 
 def test_vercel_static_root_shell_exists() -> None:
@@ -37,7 +31,7 @@ def test_vercel_static_root_matches_dashboard_shell() -> None:
 def test_vercel_config_targets_api_index() -> None:
     vercel_config = json.loads((ROOT / "vercel.json").read_text(encoding="utf-8"))
 
-    assert vercel_config["functions"]["api/index.py"]["maxDuration"] == 120
+    assert vercel_config["functions"]["app.py"]["maxDuration"] == 120
 
 
 def test_vercel_python_runtime_is_declared() -> None:
