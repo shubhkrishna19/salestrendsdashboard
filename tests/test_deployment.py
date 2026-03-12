@@ -28,10 +28,13 @@ def test_vercel_static_root_matches_dashboard_shell() -> None:
     assert public_index == dashboard_shell
 
 
-def test_vercel_config_targets_api_index() -> None:
-    vercel_config = json.loads((ROOT / "vercel.json").read_text(encoding="utf-8"))
+def test_root_fastapi_entrypoint_exposes_dashboard_and_api_routes() -> None:
+    route_paths = {route.path for route in root_app.app.routes}
 
-    assert vercel_config["functions"]["app.py"]["maxDuration"] == 120
+    assert "/" in route_paths
+    assert "/api/health" in route_paths
+    assert "/api/dashboard" in route_paths
+    assert "/api/export" in route_paths
 
 
 def test_vercel_python_runtime_is_declared() -> None:
