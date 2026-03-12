@@ -1,0 +1,1269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bluewud Sales Intelligence</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root{
+  --bg:#ece6db;
+  --bg-deep:#dfd5c2;
+  --panel:#fffaf1;
+  --panel-strong:#f5ecdd;
+  --ink:#16212a;
+  --muted:#62707a;
+  --line:#d4c5ad;
+  --accent:#0d5c63;
+  --accent-soft:#d7ebe6;
+  --accent-2:#b35c2d;
+  --accent-2-soft:#f2e1d5;
+  --good:#2e6e49;
+  --warn:#976a1d;
+  --bad:#973b3b;
+  --shadow:0 18px 40px rgba(22,33,42,.08);
+  --radius:20px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  font-family:"Aptos","Segoe UI Variable","Segoe UI",sans-serif;
+  color:var(--ink);
+  background:
+    radial-gradient(circle at top left, rgba(13,92,99,.08), transparent 28%),
+    radial-gradient(circle at top right, rgba(179,92,45,.08), transparent 24%),
+    linear-gradient(180deg, #f3ede1 0%, var(--bg) 48%, #efe7dc 100%);
+}
+button,input,select{font:inherit}
+.page{max-width:1500px;margin:0 auto;padding:24px}
+.shell{
+  background:rgba(255,250,241,.78);
+  border:1px solid rgba(212,197,173,.9);
+  border-radius:32px;
+  box-shadow:var(--shadow);
+  overflow:hidden;
+  backdrop-filter:blur(14px);
+}
+.hero{
+  display:grid;
+  grid-template-columns:2fr 1.1fr;
+  gap:24px;
+  padding:28px;
+  background:
+    linear-gradient(135deg, rgba(13,92,99,.95), rgba(16,39,55,.98)),
+    linear-gradient(135deg, rgba(179,92,45,.25), transparent);
+  color:#f7f3ea;
+}
+.hero-copy h1{
+  margin:0;
+  font-family:"Georgia","Times New Roman",serif;
+  font-size:clamp(32px,4vw,52px);
+  line-height:1.04;
+  letter-spacing:-.03em;
+}
+.hero-copy p{
+  margin:14px 0 0;
+  max-width:720px;
+  color:rgba(247,243,234,.82);
+  font-size:15px;
+  line-height:1.6;
+}
+.hero-meta{
+  display:grid;
+  gap:12px;
+  align-content:start;
+}
+.meta-card{
+  background:rgba(255,255,255,.08);
+  border:1px solid rgba(255,255,255,.12);
+  border-radius:18px;
+  padding:16px;
+}
+.meta-label{
+  display:block;
+  color:rgba(247,243,234,.62);
+  font-size:11px;
+  text-transform:uppercase;
+  letter-spacing:.08em;
+  margin-bottom:8px;
+}
+.meta-value{
+  font-size:15px;
+  line-height:1.45;
+}
+.toolbar{
+  display:flex;
+  flex-wrap:wrap;
+  gap:12px;
+  padding:20px 24px 10px;
+}
+.filters{
+  display:grid;
+  grid-template-columns:1.1fr 1fr 1.2fr 170px 170px auto;
+  gap:14px;
+  padding:0 24px 24px;
+}
+.field{display:grid;gap:7px}
+.field label{
+  font-size:11px;
+  text-transform:uppercase;
+  letter-spacing:.08em;
+  color:var(--muted);
+  font-weight:700;
+}
+.input, .select{
+  width:100%;
+  min-height:46px;
+  border-radius:14px;
+  border:1px solid var(--line);
+  background:rgba(255,250,241,.96);
+  color:var(--ink);
+  padding:0 14px;
+  outline:none;
+}
+.input:focus,.select:focus{border-color:var(--accent);box-shadow:0 0 0 4px rgba(13,92,99,.08)}
+.button-row{
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+  align-items:end;
+}
+.btn{
+  border:none;
+  border-radius:14px;
+  min-height:46px;
+  padding:0 16px;
+  font-weight:700;
+  cursor:pointer;
+  transition:transform .15s ease, opacity .15s ease, background .15s ease;
+}
+.btn:hover{transform:translateY(-1px)}
+.btn-primary{background:var(--accent);color:#f3efe7}
+.btn-secondary{background:var(--panel-strong);color:var(--ink);border:1px solid var(--line)}
+.btn-accent{background:var(--accent-2);color:#fff4ed}
+.status-strip{
+  display:flex;
+  flex-wrap:wrap;
+  gap:12px;
+  padding:0 24px 18px;
+}
+.pill{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding:10px 14px;
+  border-radius:999px;
+  border:1px solid var(--line);
+  background:rgba(255,250,241,.88);
+  font-size:13px;
+}
+.dot{width:10px;height:10px;border-radius:999px;background:var(--good)}
+.tabs{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  padding:0 24px 20px;
+}
+.tab{
+  border:1px solid var(--line);
+  background:rgba(255,250,241,.72);
+  color:var(--muted);
+  border-radius:999px;
+  padding:11px 16px;
+  font-weight:700;
+  cursor:pointer;
+}
+.tab.active{
+  background:var(--ink);
+  color:#f7f3ea;
+  border-color:var(--ink);
+}
+.content{padding:0 24px 28px}
+.panel{display:none}
+.panel.active{display:block}
+.kpi-grid{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:14px;
+  margin-bottom:18px;
+}
+.kpi{
+  background:linear-gradient(180deg, rgba(255,250,241,.98), rgba(245,236,221,.92));
+  border:1px solid var(--line);
+  border-radius:20px;
+  padding:18px;
+  box-shadow:var(--shadow);
+}
+.kpi .label{
+  color:var(--muted);
+  font-size:11px;
+  text-transform:uppercase;
+  letter-spacing:.08em;
+  font-weight:700;
+}
+.kpi .value{
+  margin-top:10px;
+  font-size:30px;
+  font-weight:800;
+  letter-spacing:-.04em;
+}
+.kpi .sub{
+  margin-top:8px;
+  color:var(--muted);
+  font-size:12px;
+}
+.grid{
+  display:grid;
+  gap:16px;
+  margin-bottom:16px;
+}
+.grid.two{grid-template-columns:1.45fr .95fr}
+.grid.equal{grid-template-columns:1fr 1fr}
+.grid.triple{grid-template-columns:repeat(3,1fr)}
+.card{
+  background:rgba(255,250,241,.92);
+  border:1px solid var(--line);
+  border-radius:22px;
+  padding:18px;
+  box-shadow:var(--shadow);
+}
+.card h3{
+  margin:0 0 14px;
+  font-size:15px;
+  letter-spacing:-.02em;
+}
+.card-head{
+  display:flex;
+  justify-content:space-between;
+  gap:12px;
+  align-items:flex-start;
+  margin-bottom:12px;
+}
+.chip{
+  border-radius:999px;
+  padding:7px 10px;
+  font-size:11px;
+  font-weight:700;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+  background:var(--accent-soft);
+  color:var(--accent);
+}
+.canvas-wrap{position:relative;height:320px}
+.canvas-wrap.short{height:240px}
+.table-wrap{overflow:auto;max-height:420px}
+.table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:13px;
+}
+.table th,.table td{
+  padding:10px 12px;
+  border-bottom:1px solid rgba(212,197,173,.7);
+  text-align:left;
+  white-space:nowrap;
+}
+.table th{
+  position:sticky;
+  top:0;
+  background:rgba(245,236,221,.98);
+  color:var(--muted);
+  font-size:11px;
+  text-transform:uppercase;
+  letter-spacing:.08em;
+}
+.insight-list,.scroll-list{
+  display:grid;
+  gap:12px;
+}
+.insight{
+  border:1px solid rgba(212,197,173,.9);
+  background:rgba(255,250,241,.88);
+  border-radius:16px;
+  padding:14px;
+}
+.insight strong{display:block;font-size:13px;margin-bottom:6px}
+.insight p{margin:0;color:var(--muted);line-height:1.55;font-size:13px}
+.summary-cards{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:12px;
+}
+.summary-card{
+  border-radius:18px;
+  padding:14px;
+  border:1px solid var(--line);
+  background:rgba(245,236,221,.9);
+}
+.summary-card .small{
+  color:var(--muted);
+  font-size:11px;
+  text-transform:uppercase;
+  letter-spacing:.08em;
+  font-weight:700;
+}
+.summary-card .big{
+  margin-top:8px;
+  font-size:20px;
+  font-weight:800;
+  letter-spacing:-.03em;
+}
+.metric-line{
+  display:flex;
+  justify-content:space-between;
+  gap:12px;
+  padding:10px 0;
+  border-bottom:1px solid rgba(212,197,173,.7);
+  font-size:13px;
+}
+.metric-line:last-child{border-bottom:none;padding-bottom:0}
+.metric-line span:first-child{color:var(--muted)}
+.notice{
+  display:none;
+  margin:0 24px 18px;
+  padding:14px 16px;
+  border-radius:16px;
+  font-size:13px;
+}
+.notice.show{display:block}
+.notice.error{background:#f6dfdc;color:#7d2f2f;border:1px solid #e5b3ad}
+.notice.info{background:#e1efec;color:#0d5c63;border:1px solid #bfdcd6}
+.loader{
+  position:fixed;
+  inset:0;
+  display:none;
+  align-items:center;
+  justify-content:center;
+  background:rgba(236,230,219,.72);
+  backdrop-filter:blur(10px);
+  z-index:50;
+}
+.loader.show{display:flex}
+.loader-box{
+  min-width:240px;
+  background:rgba(255,250,241,.96);
+  border:1px solid var(--line);
+  border-radius:22px;
+  padding:20px;
+  text-align:center;
+  box-shadow:var(--shadow);
+}
+.spinner{
+  width:42px;
+  height:42px;
+  margin:0 auto 14px;
+  border-radius:999px;
+  border:3px solid rgba(13,92,99,.15);
+  border-top-color:var(--accent);
+  animation:spin .8s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+.modal{
+  position:fixed;
+  inset:0;
+  display:none;
+  align-items:center;
+  justify-content:center;
+  background:rgba(15,22,29,.5);
+  z-index:60;
+}
+.modal.show{display:flex}
+.modal-card{
+  width:min(560px,92vw);
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:24px;
+  padding:24px;
+  box-shadow:var(--shadow);
+}
+.modal-card h2{margin:0 0 10px;font-size:24px;letter-spacing:-.03em}
+.modal-card p{margin:0 0 18px;color:var(--muted);line-height:1.6}
+.modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}
+@media (max-width:1180px){
+  .hero{grid-template-columns:1fr}
+  .filters{grid-template-columns:1fr 1fr 1fr 1fr}
+  .grid.two,.grid.equal,.grid.triple,.summary-cards{grid-template-columns:1fr 1fr}
+  .kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (max-width:760px){
+  .page{padding:12px}
+  .shell{border-radius:24px}
+  .hero,.toolbar,.content,.tabs,.filters,.status-strip{padding-left:16px;padding-right:16px}
+  .filters{grid-template-columns:1fr}
+  .grid.two,.grid.equal,.grid.triple,.summary-cards,.kpi-grid{grid-template-columns:1fr}
+  .hero-copy h1{font-size:34px}
+}
+</style>
+</head>
+<body>
+<div id="loader" class="loader">
+  <div class="loader-box">
+    <div class="spinner"></div>
+    <div id="loaderText">Loading dashboard...</div>
+  </div>
+</div>
+
+<div id="noticeError" class="notice error"></div>
+<div id="noticeInfo" class="notice info"></div>
+
+<div id="sourceModal" class="modal">
+  <div class="modal-card">
+    <h2>Update Data Source</h2>
+    <p>Paste the direct Google Drive, SharePoint, or other file URL for the latest workbook. The app will rebuild its in-memory snapshot from this source.</p>
+    <div class="field">
+      <label for="sourceUrlInput">Workbook URL</label>
+      <input id="sourceUrlInput" class="input" type="text" placeholder="https://drive.google.com/file/d/... or sharepoint link">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeSourceModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="applySourceUrl()">Load Source</button>
+    </div>
+  </div>
+</div>
+
+<div class="page">
+  <div class="shell">
+    <section class="hero">
+      <div class="hero-copy">
+        <h1>Bluewud Sales Intelligence</h1>
+        <p>
+          Internal analytics for revenue, returns, platform mix, budget tracking, and operational patterns.
+          Every metric is driven from the normalized sales workbook, with unique orders as the primary count lens.
+        </p>
+      </div>
+      <div class="hero-meta">
+        <div class="meta-card">
+          <span class="meta-label">Data Source</span>
+          <div id="metaSource" class="meta-value">Loading...</div>
+        </div>
+        <div class="meta-card">
+          <span class="meta-label">Loaded State</span>
+          <div id="metaLoaded" class="meta-value">Checking health...</div>
+        </div>
+        <div class="meta-card">
+          <span class="meta-label">Snapshot Path</span>
+          <div class="meta-value">Fast runtime path enabled for repeated filtering and future Vercel/AppSail deployment.</div>
+        </div>
+      </div>
+    </section>
+
+    <div class="toolbar">
+      <div class="button-row">
+        <button class="btn btn-primary" onclick="loadDashboard()">Apply Filters</button>
+        <button class="btn btn-secondary" onclick="resetFilters()">Reset</button>
+        <button class="btn btn-secondary" onclick="reloadCurrentSource()">Reload Current Source</button>
+        <button class="btn btn-accent" onclick="openSourceModal()">Change Source URL</button>
+        <button class="btn btn-secondary" onclick="exportCsv()">Export Filtered CSV</button>
+      </div>
+    </div>
+
+    <div class="filters">
+      <div class="field">
+        <label for="filterPlatform">Platform</label>
+        <select id="filterPlatform" class="select"></select>
+      </div>
+      <div class="field">
+        <label for="filterCategory">Category</label>
+        <select id="filterCategory" class="select"></select>
+      </div>
+      <div class="field">
+        <label for="filterProduct">Product Search</label>
+        <input id="filterProduct" class="input" type="text" list="productList" placeholder="Search products">
+        <datalist id="productList"></datalist>
+      </div>
+      <div class="field">
+        <label for="filterStart">From</label>
+        <input id="filterStart" class="input" type="date">
+      </div>
+      <div class="field">
+        <label for="filterEnd">To</label>
+        <input id="filterEnd" class="input" type="date">
+      </div>
+      <div class="field">
+        <label>Current Query</label>
+        <div id="querySummary" class="pill">All data</div>
+      </div>
+    </div>
+
+    <div class="status-strip">
+      <div class="pill"><span class="dot" id="statusDot"></span><span id="statusText">Checking data health...</span></div>
+      <div class="pill" id="statusRows">Rows: --</div>
+      <div class="pill" id="statusOrders">Unique orders: --</div>
+      <div class="pill" id="statusLoadedAt">Loaded: --</div>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active" data-tab="overview" onclick="switchTab('overview')">Overview</button>
+      <button class="tab" data-tab="channels" onclick="switchTab('channels')">Channels</button>
+      <button class="tab" data-tab="products" onclick="switchTab('products')">Products</button>
+      <button class="tab" data-tab="returns" onclick="switchTab('returns')">Returns</button>
+      <button class="tab" data-tab="operations" onclick="switchTab('operations')">Operations</button>
+      <button class="tab" data-tab="fy" onclick="switchTab('fy')">FY Lens</button>
+    </div>
+
+    <div class="content">
+      <section id="panel-overview" class="panel active">
+        <div id="overviewKpis" class="kpi-grid"></div>
+        <div class="grid two">
+          <div class="card">
+            <div class="card-head">
+              <h3>Revenue trend</h3>
+              <div id="trendFreq" class="chip">Frequency</div>
+            </div>
+            <div class="canvas-wrap"><canvas id="chartTrend"></canvas></div>
+          </div>
+          <div class="card">
+            <div class="card-head">
+              <h3>Filtered insights</h3>
+              <div class="chip">Live</div>
+            </div>
+            <div id="insightList" class="insight-list"></div>
+          </div>
+        </div>
+        <div class="grid equal">
+          <div class="card">
+            <div class="card-head">
+              <h3>Platform share</h3>
+              <div class="chip">Net revenue</div>
+            </div>
+            <div class="canvas-wrap short"><canvas id="chartPlatformShare"></canvas></div>
+          </div>
+          <div class="card">
+            <div class="card-head">
+              <h3>Category mix</h3>
+              <div class="chip">Current slice</div>
+            </div>
+            <div class="canvas-wrap short"><canvas id="chartCategoryMix"></canvas></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <h3>Workbook strategic cards</h3>
+            <div class="chip">Static FY layer</div>
+          </div>
+          <div id="summaryCards" class="summary-cards"></div>
+        </div>
+      </section>
+
+      <section id="panel-channels" class="panel">
+        <div class="grid two">
+          <div class="card">
+            <div class="card-head">
+              <h3>Channel comparison</h3>
+              <div class="chip">Net vs returns</div>
+            </div>
+            <div class="canvas-wrap"><canvas id="chartChannels"></canvas></div>
+          </div>
+          <div class="card">
+            <div class="card-head">
+              <h3>Channel quality</h3>
+              <div class="chip">Value RTO</div>
+            </div>
+            <div class="canvas-wrap"><canvas id="chartChannelRto"></canvas></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <h3>Channel table</h3>
+            <div class="chip">Unique orders</div>
+          </div>
+          <div class="table-wrap"><table class="table" id="tableChannels"></table></div>
+        </div>
+      </section>
+
+      <section id="panel-products" class="panel">
+        <div class="grid triple">
+          <div class="card"><div class="card-head"><h3>Top by net revenue</h3><div class="chip">Top 10</div></div><div class="canvas-wrap short"><canvas id="chartProductsRevenue"></canvas></div></div>
+          <div class="card"><div class="card-head"><h3>Top by net quantity</h3><div class="chip">Top 10</div></div><div class="canvas-wrap short"><canvas id="chartProductsVolume"></canvas></div></div>
+          <div class="card"><div class="card-head"><h3>Top by unique orders</h3><div class="chip">Top 10</div></div><div class="canvas-wrap short"><canvas id="chartProductsOrders"></canvas></div></div>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <h3>Product leaderboard</h3>
+            <div class="chip">Revenue, orders, return risk</div>
+          </div>
+          <div class="table-wrap"><table class="table" id="tableProducts"></table></div>
+        </div>
+      </section>
+
+      <section id="panel-returns" class="panel">
+        <div class="grid two">
+          <div class="card">
+            <div class="card-head">
+              <h3>Return trend</h3>
+              <div class="chip">Value and quantity</div>
+            </div>
+            <div class="canvas-wrap"><canvas id="chartReturnsTrend"></canvas></div>
+          </div>
+          <div class="card">
+            <div class="card-head">
+              <h3>Returns by reason</h3>
+              <div class="chip">Current slice</div>
+            </div>
+            <div class="canvas-wrap"><canvas id="chartReturnReasons"></canvas></div>
+          </div>
+        </div>
+        <div class="grid equal">
+          <div class="card">
+            <div class="card-head">
+              <h3>Return validity</h3>
+              <div class="chip">Value split</div>
+            </div>
+            <div class="canvas-wrap short"><canvas id="chartReturnValidity"></canvas></div>
+          </div>
+          <div class="card">
+            <div class="card-head">
+              <h3>Highest-RTO channels</h3>
+              <div class="chip">Filtered</div>
+            </div>
+            <div class="table-wrap"><table class="table" id="tableReturns"></table></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="panel-operations" class="panel">
+        <div class="grid two">
+          <div class="card">
+            <div class="card-head">
+              <h3>Orders and revenue by month</h3>
+              <div class="chip">Unique orders</div>
+            </div>
+            <div class="canvas-wrap"><canvas id="chartOperationsMonth"></canvas></div>
+          </div>
+          <div class="card">
+            <div class="card-head">
+              <h3>Weekday distribution</h3>
+              <div class="chip">Demand rhythm</div>
+            </div>
+            <div class="canvas-wrap"><canvas id="chartWeekday"></canvas></div>
+          </div>
+        </div>
+        <div class="grid equal">
+          <div class="card">
+            <div class="card-head">
+              <h3>Budget vs actual</h3>
+              <div class="chip">FY 2025-26</div>
+            </div>
+            <div class="canvas-wrap short"><canvas id="chartBudget"></canvas></div>
+          </div>
+          <div class="card">
+            <div class="card-head">
+              <h3>Operational summary</h3>
+              <div class="chip">Current filters</div>
+            </div>
+            <div id="operationsMetrics"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="panel-fy" class="panel">
+        <div class="grid two">
+          <div class="card">
+            <div class="card-head">
+              <h3>FY sales comparison</h3>
+              <div class="chip">Workbook summary sheet</div>
+            </div>
+            <div class="canvas-wrap"><canvas id="chartFySales"></canvas></div>
+          </div>
+          <div class="card">
+            <div class="card-head">
+              <h3>Channel growth</h3>
+              <div class="chip">FY 24-25 vs FY 25-26</div>
+            </div>
+            <div class="canvas-wrap"><canvas id="chartChannelGrowth"></canvas></div>
+          </div>
+        </div>
+        <div class="grid two">
+          <div class="card">
+            <div class="card-head">
+              <h3>Budget tracker</h3>
+              <div class="chip">Scrollable</div>
+            </div>
+            <div class="table-wrap"><table class="table" id="tableBudget"></table></div>
+          </div>
+          <div class="card">
+            <div class="card-head">
+              <h3>Strategic observations</h3>
+              <div class="chip">Workbook notes</div>
+            </div>
+            <div id="staticInsights" class="scroll-list"></div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script>
+const state = {
+  dashboard: null,
+  filtersMeta: null,
+  activeTab: "overview",
+  charts: {},
+  productTimer: null,
+};
+
+const MONEY_COLOR = "#0d5c63";
+const RETURN_COLOR = "#b35c2d";
+const GOOD_COLOR = "#2e6e49";
+const BAD_COLOR = "#973b3b";
+const NEUTRAL_COLOR = "#6b7280";
+
+function money(value) {
+  const n = Number(value || 0);
+  const abs = Math.abs(n);
+  if (abs >= 1e7) return "₹" + (n / 1e7).toFixed(2) + "Cr";
+  if (abs >= 1e5) return "₹" + (n / 1e5).toFixed(2) + "L";
+  if (abs >= 1e3) return "₹" + (n / 1e3).toFixed(1) + "K";
+  return "₹" + Math.round(n).toLocaleString("en-IN");
+}
+
+function number(value) {
+  return Math.round(Number(value || 0)).toLocaleString("en-IN");
+}
+
+function pct(value) {
+  return (Number(value || 0)).toFixed(1) + "%";
+}
+
+function shortLabel(value, max = 28) {
+  if (!value) return "";
+  return value.length > max ? value.slice(0, max - 1) + "…" : value;
+}
+
+function showLoader(text) {
+  document.getElementById("loader").classList.add("show");
+  document.getElementById("loaderText").textContent = text || "Loading...";
+}
+
+function hideLoader() {
+  document.getElementById("loader").classList.remove("show");
+}
+
+function showNotice(kind, message) {
+  const errorEl = document.getElementById("noticeError");
+  const infoEl = document.getElementById("noticeInfo");
+  errorEl.classList.remove("show");
+  infoEl.classList.remove("show");
+  if (!message) return;
+  const target = kind === "error" ? errorEl : infoEl;
+  target.textContent = message;
+  target.classList.add("show");
+  setTimeout(() => target.classList.remove("show"), 7000);
+}
+
+async function fetchJson(path, options) {
+  const response = await fetch(path, options);
+  if (!response.ok) throw new Error(path + " -> " + response.status);
+  return response.json();
+}
+
+function currentFilters() {
+  return {
+    platform: document.getElementById("filterPlatform").value || "",
+    category: document.getElementById("filterCategory").value || "",
+    start_date: document.getElementById("filterStart").value || "",
+    end_date: document.getElementById("filterEnd").value || "",
+    product_query: document.getElementById("filterProduct").value.trim() || "",
+  };
+}
+
+function queryFromFilters(filters) {
+  const params = new URLSearchParams();
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value) params.set(key, value);
+  });
+  return params.toString();
+}
+
+function destroyChart(id) {
+  if (state.charts[id]) {
+    state.charts[id].destroy();
+    delete state.charts[id];
+  }
+}
+
+function makeChart(id, config) {
+  destroyChart(id);
+  const ctx = document.getElementById(id).getContext("2d");
+  state.charts[id] = new Chart(ctx, config);
+}
+
+Chart.defaults.color = "#62707a";
+Chart.defaults.font.family = '"Aptos","Segoe UI Variable","Segoe UI",sans-serif';
+Chart.defaults.font.size = 11;
+
+function populateFilters(meta) {
+  state.filtersMeta = meta;
+  const platformEl = document.getElementById("filterPlatform");
+  const categoryEl = document.getElementById("filterCategory");
+  platformEl.innerHTML = '<option value="">All platforms</option>';
+  categoryEl.innerHTML = '<option value="">All categories</option>';
+
+  (meta.platforms || []).forEach((platform) => {
+    platformEl.innerHTML += `<option value="${platform.value}">${platform.label} (${platform.value})</option>`;
+  });
+  (meta.categories || []).forEach((category) => {
+    categoryEl.innerHTML += `<option value="${category}">${category}</option>`;
+  });
+
+  if (meta.date_range) {
+    document.getElementById("filterStart").value = meta.date_range.min;
+    document.getElementById("filterEnd").value = meta.date_range.max;
+  }
+}
+
+function renderHealth(health) {
+  document.getElementById("metaSource").textContent = `${health.source_type}: ${health.source}`;
+  document.getElementById("metaLoaded").textContent = health.data_loaded
+    ? `${number(health.rows)} rows loaded with ${number(health.unique_orders)} unique orders`
+    : "Data unavailable";
+  document.getElementById("statusDot").style.background = health.data_loaded ? GOOD_COLOR : BAD_COLOR;
+  document.getElementById("statusText").textContent = health.data_loaded ? "Dataset healthy" : "Dataset unavailable";
+  document.getElementById("statusRows").textContent = `Rows: ${number(health.rows)}`;
+  document.getElementById("statusOrders").textContent = `Unique orders: ${number(health.unique_orders)}`;
+  document.getElementById("statusLoadedAt").textContent = health.loaded_at ? `Loaded: ${health.loaded_at}` : "Loaded: --";
+}
+
+function renderQuerySummary(filters) {
+  const bits = [];
+  if (filters.platform) bits.push(filters.platform);
+  if (filters.category) bits.push(filters.category);
+  if (filters.product_query) bits.push(`Product contains "${filters.product_query}"`);
+  if (filters.start_date && filters.end_date) bits.push(`${filters.start_date} to ${filters.end_date}`);
+  document.getElementById("querySummary").textContent = bits.length ? bits.join(" | ") : "All data";
+}
+
+function renderKpis(kpis) {
+  const cards = [
+    ["Net revenue", kpis.net_revenue_formatted, "After returns"],
+    ["Gross sales", kpis.gross_sales_formatted, "Before returns"],
+    ["Unique orders", number(kpis.unique_orders), "Primary order lens"],
+    ["AOV", kpis.aov_formatted, "Net revenue / unique orders"],
+    ["Net units", number(kpis.sales_volume_net), "Quantity after returns"],
+    ["Return value", kpis.return_value_formatted, `${pct(kpis.return_rate_value)} of gross sales`],
+    ["Return quantity", number(kpis.return_qty), `${pct(kpis.return_rate_qty)} of sold quantity`],
+    ["Tax collected", kpis.tax_collected_formatted, `${number(kpis.unique_products)} products in slice`],
+  ];
+  document.getElementById("overviewKpis").innerHTML = cards.map(([label, value, sub]) => `
+    <div class="kpi">
+      <div class="label">${label}</div>
+      <div class="value">${value}</div>
+      <div class="sub">${sub}</div>
+    </div>
+  `).join("");
+}
+
+function renderInsights(items, targetId) {
+  const target = document.getElementById(targetId);
+  const payload = (items || []).map((item) => `
+    <div class="insight">
+      <strong>${item.title}</strong>
+      <p>${item.body}</p>
+    </div>
+  `).join("");
+  target.innerHTML = payload || '<div class="insight"><strong>No insights</strong><p>No insight rows are available for the current slice.</p></div>';
+}
+
+function renderSummaryCards(cards) {
+  const target = document.getElementById("summaryCards");
+  target.innerHTML = (cards || []).slice(0, 8).map((card) => `
+    <div class="summary-card">
+      <div class="small">${card.label}</div>
+      <div class="big">${card.value}</div>
+    </div>
+  `).join("");
+}
+
+function renderTable(targetId, headers, rows) {
+  const head = `<thead><tr>${headers.map((item) => `<th>${item}</th>`).join("")}</tr></thead>`;
+  const body = `<tbody>${rows.join("")}</tbody>`;
+  document.getElementById(targetId).innerHTML = head + body;
+}
+
+function renderOverview(data) {
+  renderKpis(data.kpis);
+  renderInsights(data.insights, "insightList");
+  renderSummaryCards((data.summary_sheet || {}).headline_cards || []);
+  document.getElementById("trendFreq").textContent = (data.trend.frequency || "none").toUpperCase();
+
+  makeChart("chartTrend", {
+    type: "line",
+    data: {
+      labels: (data.trend.series || []).map((row) => row.date),
+      datasets: [
+        { label: "Net revenue", data: (data.trend.series || []).map((row) => row.net_revenue), borderColor: MONEY_COLOR, backgroundColor: "rgba(13,92,99,.12)", fill: true, tension: .35, pointRadius: 2 },
+        { label: "Returns", data: (data.trend.series || []).map((row) => row.returns), borderColor: RETURN_COLOR, backgroundColor: "rgba(179,92,45,.08)", fill: false, tension: .3, pointRadius: 2 },
+      ],
+    },
+    options: { responsive: true, maintainAspectRatio: false, scales: { y: { ticks: { callback: (v) => money(v) } } } },
+  });
+
+  makeChart("chartPlatformShare", {
+    type: "bar",
+    data: {
+      labels: (data.platforms || []).map((row) => row.platform_label),
+      datasets: [{ data: (data.platforms || []).map((row) => row.net_revenue), backgroundColor: (data.platforms || []).map((row) => row.color) }],
+    },
+    options: { indexAxis: "y", responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { callback: (v) => money(v) } } } },
+  });
+
+  makeChart("chartCategoryMix", {
+    type: "doughnut",
+    data: {
+      labels: (data.categories || []).slice(0, 8).map((row) => row.category),
+      datasets: [{ data: (data.categories || []).slice(0, 8).map((row) => row.net_revenue), backgroundColor: ["#0d5c63","#b35c2d","#3c6e71","#8d5524","#6f1d1b","#7f5539","#588157","#4f772d"] }],
+    },
+    options: { responsive: true, maintainAspectRatio: false },
+  });
+}
+
+function renderChannels(data) {
+  makeChart("chartChannels", {
+    type: "bar",
+    data: {
+      labels: (data.platforms || []).map((row) => row.platform_label),
+      datasets: [
+        { label: "Net revenue", data: (data.platforms || []).map((row) => row.net_revenue), backgroundColor: MONEY_COLOR },
+        { label: "Returns", data: (data.platforms || []).map((row) => row.returns), backgroundColor: RETURN_COLOR },
+      ],
+    },
+    options: { responsive: true, maintainAspectRatio: false, scales: { y: { ticks: { callback: (v) => money(v) } } } },
+  });
+
+  makeChart("chartChannelRto", {
+    type: "bar",
+    data: {
+      labels: (data.platforms || []).map((row) => row.platform_label),
+      datasets: [{ label: "Value RTO %", data: (data.platforms || []).map((row) => row.return_rate_value), backgroundColor: BAD_COLOR }],
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, indexAxis: "y", scales: { x: { ticks: { callback: (v) => pct(v) } } } },
+  });
+
+  renderTable("tableChannels",
+    ["Channel", "Net revenue", "Gross sales", "Returns", "Unique orders", "Net units", "AOV", "Value RTO", "Qty RTO", "Share"],
+    (data.platforms || []).map((row) => `
+      <tr>
+        <td>${row.platform_label}<br><span style="color:var(--muted)">${row.platform}</span></td>
+        <td>${money(row.net_revenue)}</td>
+        <td>${money(row.gross_sales)}</td>
+        <td>${money(row.returns)}</td>
+        <td>${number(row.orders)}</td>
+        <td>${number(row.net_qty)}</td>
+        <td>${money(row.aov)}</td>
+        <td>${pct(row.return_rate_value)}</td>
+        <td>${pct(row.return_rate_qty)}</td>
+        <td>${pct(row.share)}</td>
+      </tr>
+    `)
+  );
+}
+
+function renderProducts(data) {
+  const revenue = data.top_products.revenue || [];
+  const volume = data.top_products.volume || [];
+  const orders = data.top_products.orders || [];
+  makeChart("chartProductsRevenue", { type: "bar", data: { labels: revenue.map((row) => shortLabel(row.product, 22)), datasets: [{ data: revenue.map((row) => row.net_revenue), backgroundColor: MONEY_COLOR }] }, options: { indexAxis: "y", responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { callback: (v) => money(v) } } } } });
+  makeChart("chartProductsVolume", { type: "bar", data: { labels: volume.map((row) => shortLabel(row.product, 22)), datasets: [{ data: volume.map((row) => row.net_qty), backgroundColor: GOOD_COLOR }] }, options: { indexAxis: "y", responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } } });
+  makeChart("chartProductsOrders", { type: "bar", data: { labels: orders.map((row) => shortLabel(row.product, 22)), datasets: [{ data: orders.map((row) => row.orders), backgroundColor: "#7f5539" }] }, options: { indexAxis: "y", responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } } });
+
+  renderTable("tableProducts",
+    ["Product", "Net revenue", "Orders", "Net units", "Returns", "Value RTO", "ASP"],
+    revenue.map((row) => `
+      <tr>
+        <td>${row.product}</td>
+        <td>${money(row.net_revenue)}</td>
+        <td>${number(row.orders)}</td>
+        <td>${number(row.net_qty)}</td>
+        <td>${money(row.returns)}</td>
+        <td>${pct(row.return_rate_value)}</td>
+        <td>${money(row.asp)}</td>
+      </tr>
+    `)
+  );
+}
+
+function renderReturns(data) {
+  const returns = data.returns || {};
+  makeChart("chartReturnsTrend", {
+    type: "line",
+    data: {
+      labels: (returns.trend || []).map((row) => row.month),
+      datasets: [
+        { label: "Return value", data: (returns.trend || []).map((row) => row.returns), borderColor: RETURN_COLOR, backgroundColor: "rgba(179,92,45,.12)", fill: true, tension: .3 },
+        { label: "Return quantity", data: (returns.trend || []).map((row) => row.return_qty), borderColor: BAD_COLOR, backgroundColor: "rgba(151,59,59,.08)", fill: false, tension: .3, yAxisID: "y1" },
+      ],
+    },
+    options: { responsive: true, maintainAspectRatio: false, scales: { y: { ticks: { callback: (v) => money(v) } }, y1: { position: "right", grid: { drawOnChartArea: false } } } },
+  });
+
+  makeChart("chartReturnReasons", {
+    type: "bar",
+    data: {
+      labels: (returns.by_reason || []).slice(0, 8).map((row) => shortLabel(row.reason, 24)),
+      datasets: [{ data: (returns.by_reason || []).slice(0, 8).map((row) => row.amount), backgroundColor: RETURN_COLOR }],
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { ticks: { callback: (v) => money(v) } } } },
+  });
+
+  makeChart("chartReturnValidity", {
+    type: "doughnut",
+    data: {
+      labels: (returns.validity || []).map((row) => row.validity),
+      datasets: [{ data: (returns.validity || []).map((row) => row.amount), backgroundColor: [GOOD_COLOR, BAD_COLOR, RETURN_COLOR] }],
+    },
+    options: { responsive: true, maintainAspectRatio: false },
+  });
+
+  renderTable("tableReturns",
+    ["Channel", "Return value", "Return qty", "Value RTO", "Qty RTO", "Unique orders"],
+    (returns.by_platform || []).map((row) => `
+      <tr>
+        <td>${row.platform_label}</td>
+        <td>${money(row.returns)}</td>
+        <td>${number(row.return_qty)}</td>
+        <td>${pct(row.return_rate_value)}</td>
+        <td>${pct(row.return_rate_qty)}</td>
+        <td>${number(row.orders)}</td>
+      </tr>
+    `)
+  );
+}
+
+function renderOperations(data) {
+  const operations = data.operations || {};
+  const budgetRows = (data.summary_sheet || {}).budget_vs_achievement || [];
+  makeChart("chartOperationsMonth", {
+    type: "bar",
+    data: {
+      labels: (operations.orders_per_month || []).map((row) => row.month),
+      datasets: [
+        { label: "Unique orders", data: (operations.orders_per_month || []).map((row) => row.orders), backgroundColor: MONEY_COLOR, yAxisID: "y" },
+        { label: "Net revenue", data: (operations.orders_per_month || []).map((row) => row.net_revenue), backgroundColor: "rgba(179,92,45,.75)", yAxisID: "y1" },
+      ],
+    },
+    options: { responsive: true, maintainAspectRatio: false, scales: { y: { position: "left" }, y1: { position: "right", grid: { drawOnChartArea: false }, ticks: { callback: (v) => money(v) } } } },
+  });
+
+  makeChart("chartWeekday", {
+    type: "bar",
+    data: {
+      labels: (operations.orders_by_weekday || []).map((row) => row.weekday),
+      datasets: [{ label: "Unique orders", data: (operations.orders_by_weekday || []).map((row) => row.orders), backgroundColor: GOOD_COLOR }],
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } },
+  });
+
+  makeChart("chartBudget", {
+    type: "bar",
+    data: {
+      labels: budgetRows.map((row) => row.month),
+      datasets: [
+        { label: "Budget", data: budgetRows.map((row) => row.budget), backgroundColor: "rgba(13,92,99,.35)" },
+        { label: "Actual", data: budgetRows.map((row) => row.actual), backgroundColor: RETURN_COLOR },
+      ],
+    },
+    options: { responsive: true, maintainAspectRatio: false, scales: { y: { ticks: { callback: (v) => money(v) } } } },
+  });
+
+  const kpis = data.kpis || {};
+  document.getElementById("operationsMetrics").innerHTML = [
+    ["Gross sales", kpis.gross_sales_formatted],
+    ["Net revenue", kpis.net_revenue_formatted],
+    ["Tax collected", kpis.tax_collected_formatted],
+    ["AOV", kpis.aov_formatted],
+    ["ASP", kpis.asp_formatted],
+    ["Value return rate", pct(kpis.return_rate_value)],
+    ["Quantity return rate", pct(kpis.return_rate_qty)],
+  ].map(([label, value]) => `<div class="metric-line"><span>${label}</span><strong>${value}</strong></div>`).join("");
+}
+
+function renderFyLens(data) {
+  const summary = data.summary_sheet || {};
+  const fyRows = summary.monthly_fy_sales || [];
+  makeChart("chartFySales", {
+    type: "line",
+    data: {
+      labels: fyRows.map((row) => row.month),
+      datasets: [
+        { label: "FY 22-23", data: fyRows.map((row) => row.fy_2022_23), borderColor: "#7f5539", tension: .3 },
+        { label: "FY 23-24", data: fyRows.map((row) => row.fy_2023_24), borderColor: "#4f772d", tension: .3 },
+        { label: "FY 24-25", data: fyRows.map((row) => row.fy_2024_25), borderColor: MONEY_COLOR, tension: .3 },
+        { label: "FY 25-26", data: fyRows.map((row) => row.fy_2025_26), borderColor: RETURN_COLOR, tension: .3 },
+      ],
+    },
+    options: { responsive: true, maintainAspectRatio: false, scales: { y: { ticks: { callback: (v) => money(v) } } } },
+  });
+
+  makeChart("chartChannelGrowth", {
+    type: "bar",
+    data: {
+      labels: (summary.channel_growth || []).map((row) => row.channel),
+      datasets: [{ label: "Growth %", data: (summary.channel_growth || []).map((row) => (Number(row.growth_pct || 0) * 100)), backgroundColor: (summary.channel_growth || []).map((row) => Number(row.growth_pct || 0) >= 0 ? GOOD_COLOR : BAD_COLOR) }],
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { ticks: { callback: (v) => pct(v) } } } },
+  });
+
+  renderTable("tableBudget",
+    ["Month", "Budget", "Actual", "Variance", "Achievement %", "YoY change"],
+    (summary.budget_vs_achievement || []).map((row) => `
+      <tr>
+        <td>${row.month}</td>
+        <td>${money(row.budget)}</td>
+        <td>${money(row.actual)}</td>
+        <td>${money(row.variance)}</td>
+        <td>${pct(Number(row.achievement_pct || 0) * 100)}</td>
+        <td>${pct(Number(row.yoy_change || 0) * 100)}</td>
+      </tr>
+    `)
+  );
+
+  renderInsights(summary.insights || [], "staticInsights");
+}
+
+function renderDashboard(data) {
+  state.dashboard = data;
+  renderOverview(data);
+  renderChannels(data);
+  renderProducts(data);
+  renderReturns(data);
+  renderOperations(data);
+  renderFyLens(data);
+}
+
+function switchTab(tab) {
+  state.activeTab = tab;
+  document.querySelectorAll(".tab").forEach((node) => node.classList.toggle("active", node.dataset.tab === tab));
+  document.querySelectorAll(".panel").forEach((node) => node.classList.toggle("active", node.id === `panel-${tab}`));
+}
+
+async function loadHealth() {
+  const health = await fetchJson("/api/health");
+  renderHealth(health);
+}
+
+async function loadFilters() {
+  const meta = await fetchJson("/api/filters");
+  populateFilters(meta);
+}
+
+async function loadDashboard() {
+  showLoader("Calculating dashboard...");
+  try {
+    const filters = currentFilters();
+    renderQuerySummary(filters);
+    const query = queryFromFilters(filters);
+    const data = await fetchJson("/api/dashboard" + (query ? `?${query}` : ""));
+    renderDashboard(data);
+    showNotice("info", "Dashboard refreshed.");
+  } catch (error) {
+    showNotice("error", "Failed to load dashboard: " + error.message);
+  } finally {
+    hideLoader();
+  }
+}
+
+async function refreshProductSuggestions() {
+  const query = document.getElementById("filterProduct").value.trim();
+  if (query.length < 2) {
+    document.getElementById("productList").innerHTML = "";
+    return;
+  }
+  const filters = currentFilters();
+  const params = new URLSearchParams();
+  params.set("q", query);
+  if (filters.platform) params.set("platform", filters.platform);
+  if (filters.category) params.set("category", filters.category);
+  if (filters.start_date) params.set("start_date", filters.start_date);
+  if (filters.end_date) params.set("end_date", filters.end_date);
+  const data = await fetchJson("/api/search/products?" + params.toString());
+  document.getElementById("productList").innerHTML = (data.items || []).map((item) => `<option value="${item}"></option>`).join("");
+}
+
+function queueProductSuggestions() {
+  clearTimeout(state.productTimer);
+  state.productTimer = setTimeout(() => {
+    refreshProductSuggestions().catch((error) => console.warn("product search", error));
+  }, 220);
+}
+
+function resetFilters() {
+  document.getElementById("filterPlatform").value = "";
+  document.getElementById("filterCategory").value = "";
+  document.getElementById("filterProduct").value = "";
+  document.getElementById("productList").innerHTML = "";
+  if (state.filtersMeta && state.filtersMeta.date_range) {
+    document.getElementById("filterStart").value = state.filtersMeta.date_range.min;
+    document.getElementById("filterEnd").value = state.filtersMeta.date_range.max;
+  }
+  loadDashboard();
+}
+
+function openSourceModal() {
+  document.getElementById("sourceModal").classList.add("show");
+  document.getElementById("sourceUrlInput").focus();
+}
+
+function closeSourceModal() {
+  document.getElementById("sourceModal").classList.remove("show");
+}
+
+async function applySourceUrl() {
+  const url = document.getElementById("sourceUrlInput").value.trim();
+  if (!url) {
+    showNotice("error", "Enter a workbook URL first.");
+    return;
+  }
+  showLoader("Loading workbook from source URL...");
+  try {
+    await fetchJson("/api/reload?url=" + encodeURIComponent(url));
+    await loadHealth();
+    await loadFilters();
+    await loadDashboard();
+    closeSourceModal();
+    showNotice("info", "Source URL loaded successfully.");
+  } catch (error) {
+    showNotice("error", "Could not load source URL: " + error.message);
+  } finally {
+    hideLoader();
+  }
+}
+
+async function reloadCurrentSource() {
+  showLoader("Reloading current source...");
+  try {
+    await fetchJson("/api/reload");
+    await loadHealth();
+    await loadFilters();
+    await loadDashboard();
+    showNotice("info", "Current source reloaded.");
+  } catch (error) {
+    showNotice("error", "Reload failed: " + error.message);
+  } finally {
+    hideLoader();
+  }
+}
+
+function exportCsv() {
+  const query = queryFromFilters(currentFilters());
+  window.location.href = "/api/export" + (query ? `?${query}` : "");
+}
+
+async function boot() {
+  showLoader("Preparing sales intelligence...");
+  try {
+    await loadHealth();
+    await loadFilters();
+    document.getElementById("filterProduct").addEventListener("input", queueProductSuggestions);
+    await loadDashboard();
+  } catch (error) {
+    showNotice("error", "Boot failed: " + error.message);
+  } finally {
+    hideLoader();
+  }
+}
+
+window.addEventListener("DOMContentLoaded", boot);
+</script>
+</body>
+</html>

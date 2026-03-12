@@ -20,6 +20,20 @@ def test_vercel_entrypoint_uses_root_app() -> None:
     assert vercel_app is root_app.app
 
 
+def test_vercel_static_root_shell_exists() -> None:
+    public_index = (ROOT / "public" / "index.html").read_text(encoding="utf-8")
+
+    assert "Bluewud Sales Intelligence" in public_index
+    assert 'id="overviewKpis"' in public_index
+
+
+def test_vercel_static_root_matches_dashboard_shell() -> None:
+    dashboard_shell = (ROOT / "functions" / "salestrends" / "dashboard.html").read_text(encoding="utf-8")
+    public_index = (ROOT / "public" / "index.html").read_text(encoding="utf-8")
+
+    assert public_index == dashboard_shell
+
+
 def test_vercel_config_targets_api_index() -> None:
     vercel_config = json.loads((ROOT / "vercel.json").read_text(encoding="utf-8"))
 
