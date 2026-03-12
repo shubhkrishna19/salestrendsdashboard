@@ -19,13 +19,38 @@ def sync_public_dashboard_shell() -> None:
     shutil.copy2(source, destination)
 
 
+def local_workbook_exists() -> bool:
+    candidates = [
+        Path(app_api.DATA_FILE),
+        APP_DIR / app_api.DATA_FILE,
+        ROOT_DIR / app_api.DATA_FILE,
+    ]
+    return any(candidate.exists() for candidate in candidates)
+
+
 def main() -> None:
     sync_public_dashboard_shell()
     url = os.environ.get("DATA_URL", "").strip()
+    if app_api._dm.ready:
+        print(json.dumps(app_api._dm.health(), indent=2, default=str))
+        return
     if url:
         app_api._dm.load_from_url(url)
-    else:
+    elif local_workbook_exists():
         app_api._dm.refresh_current_source()
+    else:
+        print(
+            json.dumps(
+                {
+                    "status": "skipped",
+                    "reason": "No DATA_URL, snapshot, or local workbook available during build.",
+                    "health": app_api._dm.health(),
+                },
+                indent=2,
+                default=str,
+            )
+        )
+        return
     print(json.dumps(app_api._dm.health(), indent=2, default=str))
 
 

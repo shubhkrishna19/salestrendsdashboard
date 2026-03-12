@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sys
+import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -45,6 +46,7 @@ def test_root_fastapi_entrypoint_exposes_dashboard_and_api_routes() -> None:
 def test_vercel_config_targets_python_api_functions() -> None:
     vercel_config = json.loads((ROOT / "vercel.json").read_text(encoding="utf-8"))
 
+    assert vercel_config["buildCommand"] == "python build_snapshot.py"
     assert vercel_config["functions"]["api/index.py"]["maxDuration"] == 120
     assert vercel_config["rewrites"] == [
         {
@@ -55,11 +57,17 @@ def test_vercel_config_targets_python_api_functions() -> None:
 
 
 def test_vercel_python_runtime_is_declared() -> None:
-    pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    requirements = {
+        line.strip()
+        for line in (ROOT / "requirements.txt").read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    }
     python_version = (ROOT / ".python-version").read_text(encoding="utf-8").strip()
 
-    assert 'requires-python = ">=3.12,<3.15"' in pyproject
-    assert 'build = "python build_snapshot.py"' in pyproject
+    assert pyproject["project"]["requires-python"] == ">=3.12,<3.15"
+    assert set(pyproject["project"]["dependencies"]) == requirements
+    assert pyproject["tool"]["vercel"]["scripts"]["build"] == "python build_snapshot.py"
     assert python_version == "3.12"
 
 
