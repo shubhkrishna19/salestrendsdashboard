@@ -95,6 +95,17 @@ SNAPSHOT_COLUMNS = [
     "weekday",
 ]
 
+SEARCH_DIMENSION_COLUMNS = [
+    "product_search_text",
+    "product_search_compact",
+    "sku_search_text",
+    "sku_search_compact",
+    "sku_base",
+    "sku_base_search_text",
+    "sku_base_search_compact",
+    "sku_extension",
+]
+
 PLATFORM_DISPLAY_NAMES = {
     "Amazon Online Sale": "Amazon",
     "Flipkart Online Sale": "Flipkart",
@@ -116,6 +127,42 @@ PLATFORM_COLORS = {
     "Other Offline Parties": "#64748B",
     "Indiamart": "#DC2626",
 }
+
+SUMMARY_SECTION_KEYS = [
+    "headline_cards",
+    "monthly_fy_sales",
+    "channel_performance_current",
+    "budget_vs_achievement",
+    "rto_monthly_current",
+    "channel_growth",
+    "insights",
+]
+
+FISCAL_MONTH_NAMES = [
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+    "January",
+    "February",
+    "March",
+]
+
+FISCAL_MONTH_INDEX = {name: index for index, name in enumerate(FISCAL_MONTH_NAMES)}
+
+FY_SERIES_COLORS = [
+    "#7F5539",
+    "#4F772D",
+    "#0D5C63",
+    "#B35C2D",
+    "#3C6E71",
+    "#8D5524",
+]
 
 
 # ============================================================================
@@ -163,12 +210,70 @@ def normalize_order_id(value: Any) -> Any:
     return order_id if order_id else np.nan
 
 
+def safe_divide(numerator: Any, denominator: Any) -> Optional[float]:
+    denominator_value = safe_float(denominator)
+    if denominator_value == 0:
+        return None
+    return safe_float(numerator) / denominator_value
+
+
+def has_value(value: Any) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, float) and np.isnan(value):
+        return False
+    return value != ""
+
+
 def fiscal_year_for(date_value: pd.Timestamp) -> str:
     if pd.isna(date_value):
         return "Unknown"
     if date_value.month >= 4:
         return f"FY{date_value.year}-{str(date_value.year + 1)[-2:]}"
     return f"FY{date_value.year - 1}-{str(date_value.year)[-2:]}"
+
+
+def fiscal_month_name(date_value: pd.Timestamp) -> str:
+    if pd.isna(date_value):
+        return "Unknown"
+    return date_value.strftime("%B")
+
+
+def format_signed_percentage(value: Optional[float], decimals: int = 1) -> str:
+    if value is None:
+        return "N/A"
+    prefix = "+" if value > 0 else ""
+    return f"{prefix}{value:.{decimals}f}%"
+
+
+def pct(value: Any, decimals: int = 1) -> str:
+    if value is None or (isinstance(value, float) and np.isnan(value)):
+        return "N/A"
+    return f"{safe_float(value):.{decimals}f}%"
+
+
+def fy_label_to_key(value: str) -> str:
+    match = re.fullmatch(r"FY(\d{4})-(\d{2})", clean_text(value, ""))
+    if not match:
+        return clean_text(value, "fy_unknown").lower().replace("-", "_").replace(" ", "_")
+    return f"fy_{match.group(1)}_{match.group(2)}"
+
+
+def fy_key_to_label(value: str) -> str:
+    match = re.fullmatch(r"fy_(\d{4})_(\d{2})", clean_text(value, ""))
+    if not match:
+        return value.replace("_", " ").upper()
+    return f"FY {match.group(1)[-2:]}-{match.group(2)}"
+
+
+def fy_sort_key(value: str) -> Tuple[int, int]:
+    label_match = re.fullmatch(r"FY(\d{4})-(\d{2})", clean_text(value, ""))
+    if label_match:
+        return (int(label_match.group(1)), int(label_match.group(2)))
+    key_match = re.fullmatch(r"fy_(\d{4})_(\d{2})", clean_text(value, ""))
+    if key_match:
+        return (int(key_match.group(1)), int(key_match.group(2)))
+    return (0, 0)
 
 
 def normalize_google_drive_url(url: str) -> str:
@@ -215,6 +320,60 @@ def normalize_data_url(url: str) -> str:
     if "sharepoint.com" in url or "onedrive.live.com" in url:
         return normalize_sharepoint_url(url)
     return url
+
+
+def normalize_search_text(value: Any) -> str:
+    text = clean_text(value, "").lower()
+    text = re.sub(r"[^a-z0-9]+", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def compact_search_text(value: Any) -> str:
+    return re.sub(r"[^a-z0-9]+", "", clean_text(value, "").lower())
+
+
+def derive_sku_base(value: Any, known_skus: set[str]) -> str:
+    sku = clean_text(value, "Unknown SKU")
+    if sku == "Unknown SKU":
+        return sku
+
+    parts = [part.strip() for part in sku.split("-") if part.strip()]
+    if len(parts) <= 2:
+        return sku
+
+    candidate = "-".join(parts[:-1])
+    return candidate if candidate in known_skus else sku
+
+
+def derive_sku_extension(value: Any, base_sku: Any) -> str:
+    sku = clean_text(value, "")
+    base = clean_text(base_sku, "")
+    if not sku or not base or sku == base:
+        return ""
+    prefix = base + "-"
+    return sku[len(prefix) :] if sku.startswith(prefix) else ""
+
+
+def search_rank(value: Any, query: str, exact_bonus: int = 0) -> int:
+    value_text = normalize_search_text(value)
+    value_compact = compact_search_text(value)
+    query_text = normalize_search_text(query)
+    query_compact = compact_search_text(query)
+    if not value_text and not value_compact:
+        return 99
+    if query_compact and value_compact == query_compact:
+        return 0 + exact_bonus
+    if query_text and value_text == query_text:
+        return 0 + exact_bonus
+    if query_compact and value_compact.startswith(query_compact):
+        return 1 + exact_bonus
+    if query_text and value_text.startswith(query_text):
+        return 1 + exact_bonus
+    if query_compact and query_compact in value_compact:
+        return 2 + exact_bonus
+    if query_text and query_text in value_text:
+        return 2 + exact_bonus
+    return 50 + exact_bonus
 
 
 def read_text_cell(sheet: pd.DataFrame, row: int, col: int) -> str:
@@ -466,7 +625,7 @@ class DataManager:
                 for platform in sorted(self._df["platform_raw"].dropna().unique().tolist())
             ],
             "categories": sorted(self._df["category"].dropna().unique().tolist()),
-            "summary_sheet_available": bool(self._summary_sheet),
+            "summary_sheet_available": bool(self.summary_sheet()),
             "data_source": {
                 "source": self._source,
                 "source_type": self._source_type,
@@ -480,7 +639,472 @@ class DataManager:
         return out
 
     def summary_sheet(self) -> Dict[str, Any]:
-        return self._summary_sheet
+        source_summary = self._summary_sheet if isinstance(self._summary_sheet, dict) else {}
+        if not self.ready and not source_summary:
+            return {}
+
+        fallback = self._computed_summary_sheet(self._df if self.ready else pd.DataFrame(columns=SNAPSHOT_COLUMNS))
+        merged: Dict[str, Any] = {}
+        for key in SUMMARY_SECTION_KEYS:
+            source_value = source_summary.get(key)
+            merged[key] = source_value if source_value else fallback.get(key, [])
+
+        mode = "workbook" if any(source_summary.get(key) for key in SUMMARY_SECTION_KEYS) else "computed"
+        merged["meta"] = self._summary_sheet_metadata(merged, mode)
+        return merged
+
+    def _summary_sheet_metadata(self, summary: Dict[str, Any], mode: str) -> Dict[str, Any]:
+        fy_rows = [row for row in summary.get("monthly_fy_sales", []) if row.get("month") != "TOTAL"]
+        sample_row = fy_rows[0] if fy_rows else (summary.get("monthly_fy_sales", [{}])[:1] or [{}])[0]
+        fy_keys = sorted([key for key in sample_row.keys() if key.startswith("fy_")], key=fy_sort_key)
+        fy_series = [
+            {
+                "key": key,
+                "label": fy_key_to_label(key),
+                "color": FY_SERIES_COLORS[index % len(FY_SERIES_COLORS)],
+            }
+            for index, key in enumerate(fy_keys)
+        ]
+        budget_available = any(
+            has_value(row.get("budget"))
+            for row in summary.get("budget_vs_achievement", [])
+            if row.get("month") != "TOTAL"
+        )
+        dated_rows = self._df["order_date"].dropna() if self.ready else pd.Series(dtype="datetime64[ns]")
+        date_range = None
+        if not dated_rows.empty:
+            date_range = {
+                "min": dated_rows.min().strftime("%Y-%m-%d"),
+                "max": dated_rows.max().strftime("%Y-%m-%d"),
+            }
+
+        if mode == "workbook":
+            source_note = (
+                "Using the workbook's Sales Analytics Dashboard sheet for strategic cards, FY rollups, "
+                "and budget tracking."
+            )
+        else:
+            source_note = (
+                "Derived from the loaded sales rows because this source does not include the Sales Analytics "
+                "Dashboard sheet. FY views reflect only the loaded date range, and budget targets are unavailable."
+            )
+
+        return {
+            "mode": mode,
+            "budget_available": budget_available,
+            "fy_series": fy_series,
+            "date_range": date_range,
+            "source_note": source_note,
+        }
+
+    def _computed_summary_sheet(self, df: Optional[pd.DataFrame]) -> Dict[str, Any]:
+        empty_payload = {key: [] for key in SUMMARY_SECTION_KEYS}
+        if df is None or df.empty:
+            return empty_payload
+
+        dated_df = df[df["order_date"].notna() & df["fy"].astype(str).str.startswith("FY")].copy()
+        scope_df = dated_df if not dated_df.empty else df.copy()
+        available_fys = sorted(dated_df["fy"].dropna().unique().tolist(), key=fy_sort_key)
+        current_fy = available_fys[-1] if available_fys else None
+        previous_fy = available_fys[-2] if len(available_fys) > 1 else None
+        current_df = dated_df[dated_df["fy"] == current_fy].copy() if current_fy else scope_df.copy()
+        previous_df = dated_df[dated_df["fy"] == previous_fy].copy() if previous_fy else pd.DataFrame(columns=df.columns)
+
+        return {
+            "headline_cards": self._computed_headline_cards(scope_df, current_df, previous_df, current_fy, previous_fy),
+            "monthly_fy_sales": self._computed_monthly_fy_sales(dated_df, available_fys),
+            "channel_performance_current": self._computed_channel_performance_current(current_df, previous_df),
+            "budget_vs_achievement": self._computed_budget_vs_achievement(current_df, previous_df),
+            "rto_monthly_current": self._computed_rto_monthly_current(current_df),
+            "channel_growth": self._computed_channel_growth(current_df, previous_df, current_fy, previous_fy),
+            "insights": self._computed_strategic_insights(scope_df, current_df, previous_df, current_fy, previous_fy),
+        }
+
+    def _computed_headline_cards(
+        self,
+        scope_df: pd.DataFrame,
+        current_df: pd.DataFrame,
+        previous_df: pd.DataFrame,
+        current_fy: Optional[str],
+        previous_fy: Optional[str],
+    ) -> List[Dict[str, str]]:
+        scope = current_df if not current_df.empty else scope_df
+        kpis = self.kpis(scope)
+        platforms = self.platform_data(scope)
+        categories = self.category_data(scope)
+        trend = self.returns_trend(scope)
+        scope_label = fy_key_to_label(fy_label_to_key(current_fy)) if current_fy else "Loaded Range"
+        top_platform = platforms[0] if platforms else None
+        eligible_platforms = [row for row in platforms if row["orders"] >= 25] or platforms
+        highest_rto = max(eligible_platforms, key=lambda row: row["return_rate_value"]) if eligible_platforms else None
+        top_category = categories[0] if categories else None
+        best_month = max(trend, key=lambda row: row["net_revenue"]) if trend else None
+        dated_rows = scope["order_date"].dropna()
+        period_label = "N/A"
+        if not dated_rows.empty:
+            period_label = f"{dated_rows.min():%d %b %Y} to {dated_rows.max():%d %b %Y}"
+
+        cards = [
+            {"label": f"Total revenue ({scope_label})", "value": kpis["gross_sales_formatted"]},
+            {"label": f"Returns value ({scope_label})", "value": kpis["return_value_formatted"]},
+            {"label": f"Net revenue after returns ({scope_label})", "value": kpis["net_revenue_formatted"]},
+            {"label": f"Unique orders ({scope_label})", "value": f"{kpis['unique_orders']:,}"},
+            {"label": "Average order value", "value": kpis["aov_formatted"]},
+            {"label": "Average selling price", "value": kpis["asp_formatted"]},
+            {"label": "Return rate by value", "value": f"{kpis['return_rate_value']:.1f}%"},
+            {"label": "Return rate by quantity", "value": f"{kpis['return_rate_qty']:.1f}%"},
+            {
+                "label": "Top revenue channel",
+                "value": (
+                    f"{top_platform['platform_label']} ({top_platform['share']:.1f}%)"
+                    if top_platform
+                    else "N/A"
+                ),
+            },
+            {
+                "label": "Highest value return risk",
+                "value": (
+                    f"{highest_rto['platform_label']} ({highest_rto['return_rate_value']:.1f}%)"
+                    if highest_rto
+                    else "N/A"
+                ),
+            },
+            {
+                "label": "Top category",
+                "value": (
+                    f"{top_category['category']} ({fmt_inr(top_category['net_revenue'])})"
+                    if top_category
+                    else "N/A"
+                ),
+            },
+            {
+                "label": "Best revenue month",
+                "value": (
+                    f"{best_month['month']} ({fmt_inr(best_month['net_revenue'])})"
+                    if best_month
+                    else "N/A"
+                ),
+            },
+            {"label": "Loaded period", "value": period_label},
+        ]
+
+        if not previous_df.empty and previous_fy:
+            previous_kpis = self.kpis(previous_df)
+            previous_label = fy_key_to_label(fy_label_to_key(previous_fy))
+            net_growth = safe_divide(
+                kpis["net_revenue"] - previous_kpis["net_revenue"],
+                previous_kpis["net_revenue"],
+            )
+            order_growth = safe_divide(
+                kpis["unique_orders"] - previous_kpis["unique_orders"],
+                previous_kpis["unique_orders"],
+            )
+            cards.extend(
+                [
+                    {
+                        "label": f"Net growth ({scope_label} vs {previous_label})",
+                        "value": format_signed_percentage(net_growth * 100 if net_growth is not None else None),
+                    },
+                    {
+                        "label": f"Order growth ({scope_label} vs {previous_label})",
+                        "value": format_signed_percentage(order_growth * 100 if order_growth is not None else None),
+                    },
+                ]
+            )
+
+        return cards
+
+    def _computed_monthly_fy_sales(self, df: pd.DataFrame, available_fys: List[str]) -> List[Dict[str, Any]]:
+        if df.empty or not available_fys:
+            return []
+
+        monthly_df = df.copy()
+        monthly_df["fiscal_month_name"] = monthly_df["order_date"].apply(fiscal_month_name)
+        grouped = (
+            monthly_df.groupby(["fiscal_month_name", "fy"], observed=True)["net_revenue"]
+            .sum()
+            .to_dict()
+        )
+        totals = monthly_df.groupby("fy", observed=True)["net_revenue"].sum().to_dict()
+        rows: List[Dict[str, Any]] = []
+
+        for month in FISCAL_MONTH_NAMES:
+            row: Dict[str, Any] = {"month": month}
+            for fy in available_fys:
+                row[fy_label_to_key(fy)] = safe_float(grouped.get((month, fy), 0.0))
+            rows.append(row)
+
+        total_row: Dict[str, Any] = {"month": "TOTAL"}
+        for fy in available_fys:
+            total_row[fy_label_to_key(fy)] = safe_float(totals.get(fy, 0.0))
+        rows.append(total_row)
+        return rows
+
+    def _computed_channel_growth(
+        self,
+        current_df: pd.DataFrame,
+        previous_df: pd.DataFrame,
+        current_fy: Optional[str],
+        previous_fy: Optional[str],
+    ) -> List[Dict[str, Any]]:
+        if current_df.empty:
+            return []
+
+        current_rows = {row["platform_label"]: row for row in self.platform_data(current_df)}
+        previous_rows = {row["platform_label"]: row for row in self.platform_data(previous_df)}
+        channel_labels = sorted(
+            set(current_rows) | set(previous_rows),
+            key=lambda label: current_rows.get(label, {"net_revenue": 0.0})["net_revenue"],
+            reverse=True,
+        )
+        current_key = fy_label_to_key(current_fy) if current_fy else "fy_current"
+        previous_key = fy_label_to_key(previous_fy) if previous_fy else "fy_previous"
+        rows: List[Dict[str, Any]] = []
+
+        for label in channel_labels:
+            current_row = current_rows.get(label, {})
+            previous_row = previous_rows.get(label, {})
+            current_net = safe_float(current_row.get("net_revenue", 0.0))
+            previous_net = safe_float(previous_row.get("net_revenue", 0.0))
+            current_share = safe_float(current_row.get("share", 0.0)) / 100
+            previous_share = safe_float(previous_row.get("share", 0.0)) / 100
+            growth_ratio = safe_divide(current_net - previous_net, previous_net)
+            rows.append(
+                {
+                    "channel": label,
+                    f"net_sales_{previous_key}": previous_net,
+                    f"net_sales_{current_key}": current_net,
+                    "growth_value": current_net - previous_net,
+                    "growth_pct": growth_ratio,
+                    f"share_{previous_key}": previous_share,
+                    f"share_{current_key}": current_share,
+                    "share_change": current_share - previous_share,
+                }
+            )
+
+        return rows
+
+    def _computed_budget_vs_achievement(
+        self,
+        current_df: pd.DataFrame,
+        previous_df: pd.DataFrame,
+    ) -> List[Dict[str, Any]]:
+        if current_df.empty:
+            return []
+
+        current_grouped = (
+            current_df.assign(fiscal_month_name=current_df["order_date"].apply(fiscal_month_name))
+            .groupby("fiscal_month_name", observed=True)["net_revenue"]
+            .sum()
+            .to_dict()
+        )
+        previous_grouped = (
+            previous_df.assign(fiscal_month_name=previous_df["order_date"].apply(fiscal_month_name))
+            .groupby("fiscal_month_name", observed=True)["net_revenue"]
+            .sum()
+            .to_dict()
+            if not previous_df.empty
+            else {}
+        )
+
+        running_actual = 0.0
+        rows: List[Dict[str, Any]] = []
+        for month in FISCAL_MONTH_NAMES:
+            actual = safe_float(current_grouped.get(month, 0.0))
+            previous_actual = safe_float(previous_grouped.get(month, 0.0))
+            running_actual += actual
+            yoy_change = safe_divide(actual - previous_actual, previous_actual)
+            rows.append(
+                {
+                    "month": month,
+                    "budget": None,
+                    "actual": actual,
+                    "variance": None,
+                    "achievement_pct": None,
+                    "yoy_change": yoy_change,
+                    "cumulative_budget": None,
+                    "cumulative_actual": running_actual,
+                }
+            )
+
+        previous_total = safe_float(previous_df["net_revenue"].sum()) if not previous_df.empty else 0.0
+        current_total = safe_float(current_df["net_revenue"].sum())
+        rows.append(
+            {
+                "month": "TOTAL",
+                "budget": None,
+                "actual": current_total,
+                "variance": None,
+                "achievement_pct": None,
+                "yoy_change": safe_divide(current_total - previous_total, previous_total),
+                "cumulative_budget": None,
+                "cumulative_actual": current_total,
+            }
+        )
+        return rows
+
+    def _computed_channel_performance_current(
+        self,
+        current_df: pd.DataFrame,
+        previous_df: pd.DataFrame,
+    ) -> List[Dict[str, Any]]:
+        if current_df.empty:
+            return []
+
+        current_rows = self.platform_data(current_df)
+        previous_rows = {row["platform_label"]: row for row in self.platform_data(previous_df)}
+        rows: List[Dict[str, Any]] = []
+
+        for row in current_rows:
+            previous_net = safe_float(previous_rows.get(row["platform_label"], {}).get("net_revenue", 0.0))
+            growth_ratio = safe_divide(row["net_revenue"] - previous_net, previous_net)
+            if previous_net == 0 and row["net_revenue"] > 0:
+                trend = "New"
+            elif growth_ratio is None:
+                trend = "Stable"
+            elif growth_ratio > 0.03:
+                trend = "Growing"
+            elif growth_ratio < -0.03:
+                trend = "Declining"
+            else:
+                trend = "Stable"
+
+            rows.append(
+                {
+                    "channel": row["platform_label"],
+                    "gross_sales": row["gross_sales"],
+                    "returns": row["returns"],
+                    "net_sales": row["net_revenue"],
+                    "rto_rate": row["return_rate_value"] / 100,
+                    "revenue_share": row["share"] / 100,
+                    "net_qty": row["net_qty"],
+                    "trend": trend,
+                }
+            )
+
+        rows.append(
+            {
+                "channel": "TOTAL",
+                "gross_sales": safe_float(current_df["gross_sales"].sum()),
+                "returns": safe_float(current_df["return_value"].sum()),
+                "net_sales": safe_float(current_df["net_revenue"].sum()),
+                "rto_rate": safe_divide(
+                    safe_float(current_df["return_value"].sum()),
+                    safe_float(current_df["gross_sales"].sum()),
+                )
+                or 0.0,
+                "revenue_share": 1.0,
+                "net_qty": safe_float(current_df["net_qty"].sum()),
+                "trend": "Aggregate",
+            }
+        )
+        return rows
+
+    def _computed_rto_monthly_current(self, current_df: pd.DataFrame) -> List[Dict[str, Any]]:
+        if current_df.empty:
+            return []
+
+        focus_channels = {
+            "Amazon": "amazon",
+            "Flipkart": "flipkart",
+            "Pepperfry": "pepperfry",
+            "Reliance": "reliance",
+            "Shopify": "shopify",
+            "Myntra": "myntra",
+        }
+        monthly_df = current_df.copy()
+        monthly_df["fiscal_month_name"] = monthly_df["order_date"].apply(fiscal_month_name)
+        grouped = (
+            monthly_df.groupby(["fiscal_month_name", "platform_label"], observed=True)
+            .agg(
+                gross_sales=("gross_sales", "sum"),
+                returns=("return_value", "sum"),
+            )
+            .to_dict("index")
+        )
+        blended = (
+            monthly_df.groupby("fiscal_month_name", observed=True)
+            .agg(
+                gross_sales=("gross_sales", "sum"),
+                returns=("return_value", "sum"),
+            )
+            .to_dict("index")
+        )
+        rows: List[Dict[str, Any]] = []
+
+        for month in FISCAL_MONTH_NAMES:
+            row: Dict[str, Any] = {"month": month}
+            for label, key in focus_channels.items():
+                metrics = grouped.get((month, label), {})
+                row[key] = safe_divide(metrics.get("returns", 0.0), metrics.get("gross_sales", 0.0)) or 0.0
+            blended_metrics = blended.get(month, {})
+            row["blended"] = (
+                safe_divide(blended_metrics.get("returns", 0.0), blended_metrics.get("gross_sales", 0.0)) or 0.0
+            )
+            rows.append(row)
+
+        return rows
+
+    def _computed_strategic_insights(
+        self,
+        scope_df: pd.DataFrame,
+        current_df: pd.DataFrame,
+        previous_df: pd.DataFrame,
+        current_fy: Optional[str],
+        previous_fy: Optional[str],
+    ) -> List[Dict[str, str]]:
+        scope = current_df if not current_df.empty else scope_df
+        if scope.empty:
+            return []
+
+        kpis = self.kpis(scope)
+        dated_rows = scope["order_date"].dropna()
+        coverage_metric = "N/A"
+        if not dated_rows.empty:
+            coverage_metric = f"{dated_rows.min():%d %b %Y} to {dated_rows.max():%d %b %Y}"
+
+        insights: List[Dict[str, str]] = [
+            {
+                "title": "Derived FY layer",
+                "metric": fy_key_to_label(fy_label_to_key(current_fy)) if current_fy else "Loaded range",
+                "body": (
+                    "This source does not include the workbook summary sheet, so the strategic cards and FY lens "
+                    "below are computed directly from the loaded order rows."
+                ),
+                "note": (
+                    "Budget values remain unavailable until the source includes the Sales Analytics Dashboard sheet."
+                ),
+            },
+            {
+                "title": "Coverage in view",
+                "metric": coverage_metric,
+                "body": (
+                    f"The derived FY view currently spans {len(scope):,} normalized rows and "
+                    f"{kpis['unique_orders']:,} unique orders."
+                ),
+            },
+        ]
+
+        if not previous_df.empty and previous_fy:
+            previous_kpis = self.kpis(previous_df)
+            previous_label = fy_key_to_label(fy_label_to_key(previous_fy))
+            growth_ratio = safe_divide(
+                kpis["net_revenue"] - previous_kpis["net_revenue"],
+                previous_kpis["net_revenue"],
+            )
+            insights.append(
+                {
+                    "title": "Net movement vs prior FY",
+                    "metric": format_signed_percentage(growth_ratio * 100 if growth_ratio is not None else None),
+                    "body": (
+                        f"Latest loaded FY net revenue is {kpis['net_revenue_formatted']} against "
+                        f"{previous_kpis['net_revenue_formatted']} in {previous_label}."
+                    ),
+                }
+            )
+
+        insights.extend(self.dynamic_insights(scope)[:6])
+        return insights[:8]
 
     def load_from_url(self, url: str) -> Dict[str, Any]:
         if not self._load(preferred_url=url, prefer_snapshot=False):
@@ -567,14 +1191,57 @@ class DataManager:
         source_type: str,
         summary_sheet: Optional[Dict[str, Any]],
     ) -> None:
-        self._df = df
+        self._df = self._ensure_search_dimensions(df.copy())
         self._source = source
         self._source_type = source_type
         self._summary_sheet = summary_sheet or {}
         self._loaded_at = datetime.now(UTC)
         self._data_version = self._loaded_at.strftime("%Y%m%d%H%M%S")
         self._load_error = None
-        log.info("Loaded %s normalized rows from %s.", len(df), source)
+        log.info("Loaded %s normalized rows from %s.", len(self._df), source)
+
+    def _ensure_search_dimensions(self, df: pd.DataFrame) -> pd.DataFrame:
+        if set(SEARCH_DIMENSION_COLUMNS).issubset(df.columns):
+            return df
+
+        enriched = df.copy()
+        for column in ("product", "sku"):
+            if column not in enriched.columns:
+                enriched[column] = ""
+
+        known_skus = {
+            clean_text(value, "Unknown SKU")
+            for value in enriched["sku"].dropna().astype(str).tolist()
+        }
+        sku_base = enriched["sku"].apply(lambda value: derive_sku_base(value, known_skus))
+        enriched["sku_base"] = sku_base
+        enriched["sku_extension"] = [
+            derive_sku_extension(sku, base) for sku, base in zip(enriched["sku"], sku_base)
+        ]
+        enriched["product_search_text"] = enriched["product"].apply(normalize_search_text)
+        enriched["product_search_compact"] = enriched["product"].apply(compact_search_text)
+        enriched["sku_search_text"] = enriched["sku"].apply(normalize_search_text)
+        enriched["sku_search_compact"] = enriched["sku"].apply(compact_search_text)
+        enriched["sku_base_search_text"] = sku_base.apply(normalize_search_text)
+        enriched["sku_base_search_compact"] = sku_base.apply(compact_search_text)
+        return enriched
+
+    def _product_query_mask(self, df: pd.DataFrame, query: str) -> pd.Series:
+        search_df = self._ensure_search_dimensions(df)
+        query_text = normalize_search_text(query)
+        query_compact = compact_search_text(query)
+        mask = pd.Series(False, index=search_df.index)
+
+        if query_text:
+            mask = mask | search_df["product_search_text"].str.contains(query_text, regex=False, na=False)
+            mask = mask | search_df["sku_search_text"].str.contains(query_text, regex=False, na=False)
+            mask = mask | search_df["sku_base_search_text"].str.contains(query_text, regex=False, na=False)
+        if query_compact:
+            mask = mask | search_df["product_search_compact"].str.contains(query_compact, regex=False, na=False)
+            mask = mask | search_df["sku_search_compact"].str.contains(query_compact, regex=False, na=False)
+            mask = mask | search_df["sku_base_search_compact"].str.contains(query_compact, regex=False, na=False)
+
+        return mask
 
     def _snapshot_candidates(self) -> List[Path]:
         primary = Path(SNAPSHOT_FILE)
@@ -759,17 +1426,25 @@ class DataManager:
         if not self.ready:
             return pd.DataFrame(columns=SNAPSHOT_COLUMNS)
 
-        df = self._df
+        df = self._ensure_search_dimensions(self._df)
 
         if filters.get("platform"):
             df = df[df["platform_raw"].isin(filters["platform"])]
         if filters.get("category"):
             df = df[df["category"].isin(filters["category"])]
         if filters.get("product"):
-            df = df[df["product"] == filters["product"]]
+            product_token = filters["product"].strip()
+            product_mask = (
+                (df["product"] == product_token)
+                | (df["sku"] == product_token)
+                | (df["sku_base"] == product_token)
+            )
+            if not product_mask.any():
+                product_mask = self._product_query_mask(df, product_token)
+            df = df[product_mask]
         if filters.get("product_query"):
             query = filters["product_query"]
-            df = df[df["product"].str.contains(query, case=False, na=False)]
+            df = df[self._product_query_mask(df, query)]
         if filters.get("start_date"):
             df = df[df["order_date"] >= pd.to_datetime(filters["start_date"])]
         if filters.get("end_date"):
@@ -783,8 +1458,28 @@ class DataManager:
         search_filters = dict(filters)
         search_filters["product_query"] = query.strip()
         df = self.apply_filters(search_filters)
-        products = sorted(df["product"].dropna().unique().tolist())
-        return products[:limit]
+        if df.empty:
+            return []
+
+        candidates: Dict[str, int] = {}
+        for series, bonus in (
+            (df["sku_base"], 0),
+            (df["sku"], 1),
+            (df["product"], 2),
+        ):
+            for value in series.dropna().astype(str).unique().tolist():
+                cleaned = clean_text(value, "")
+                if not cleaned:
+                    continue
+                rank = search_rank(cleaned, query, exact_bonus=bonus)
+                existing = candidates.get(cleaned)
+                if existing is None or rank < existing:
+                    candidates[cleaned] = rank
+
+        return [
+            value
+            for value, _ in sorted(candidates.items(), key=lambda item: (item[1], len(item[0]), item[0].lower()))
+        ][:limit]
 
     def kpis(self, df: pd.DataFrame) -> Dict[str, Any]:
         if df.empty:
@@ -1199,21 +1894,39 @@ class DataManager:
             ],
         }
 
-    def dynamic_insights(self, df: pd.DataFrame) -> List[Dict[str, str]]:
+    def dynamic_insights(self, df: pd.DataFrame) -> List[Dict[str, Any]]:
         if df.empty:
             return []
 
-        insights: List[Dict[str, str]] = []
+        insights: List[Dict[str, Any]] = []
         kpis = self.kpis(df)
         platforms = self.platform_data(df)
         categories = self.category_data(df)
         trend = self.returns_trend(df)
+        top_products = self.top_products(df, "revenue", 3)
+        return_reasons = self.returns_by_reason(df)
+        return_validity = self.returns_validity(df)
+        operations = self.operations_summary(df)
+
+        insights.append(
+            {
+                "title": "Revenue converted to net",
+                "metric": kpis["net_revenue_formatted"],
+                "body": (
+                    f"Total revenue is {kpis['gross_sales_formatted']}. Returns remove "
+                    f"{kpis['return_value_formatted']}, leaving {kpis['net_revenue_formatted']} net revenue "
+                    "after returns."
+                ),
+                "note": f"{pct(kpis['return_rate_value'])} value return rate for the current slice.",
+            }
+        )
 
         if platforms:
             top_platform = platforms[0]
             insights.append(
                 {
-                    "title": "Top channel",
+                    "title": "Channel concentration",
+                    "metric": pct(top_platform["share"]),
                     "body": (
                         f"{top_platform['platform_label']} leads this slice with "
                         f"{fmt_inr(top_platform['net_revenue'])} net revenue and "
@@ -1227,7 +1940,8 @@ class DataManager:
                 highest_rto = max(eligible, key=lambda row: row["return_rate_value"])
                 insights.append(
                     {
-                        "title": "Highest value return rate",
+                        "title": "Highest value return exposure",
+                        "metric": pct(highest_rto["return_rate_value"]),
                         "body": (
                             f"{highest_rto['platform_label']} is the riskiest large channel here with "
                             f"{highest_rto['return_rate_value']:.1f}% value RTO across "
@@ -1240,11 +1954,46 @@ class DataManager:
             top_category = categories[0]
             insights.append(
                 {
-                    "title": "Top category",
+                    "title": "Category leader",
+                    "metric": fmt_inr(top_category["net_revenue"]),
                     "body": (
                         f"{top_category['category']} contributes {fmt_inr(top_category['net_revenue'])} "
                         f"from {top_category['orders']:,} orders."
                     ),
+                }
+            )
+
+        if top_products:
+            top_product = top_products[0]
+            insights.append(
+                {
+                    "title": "Hero product",
+                    "metric": fmt_inr(top_product["net_revenue"]),
+                    "body": (
+                        f"{top_product['product']} is the highest net-revenue product in this slice with "
+                        f"{top_product['orders']:,} unique orders and {top_product['return_rate_value']:.1f}% "
+                        "value RTO."
+                    ),
+                }
+            )
+
+        if return_validity:
+            invalid_amount = sum(
+                safe_float(row["amount"])
+                for row in return_validity
+                if clean_text(row["validity"], "").lower() == "invalid"
+            )
+            total_return_amount = sum(safe_float(row["amount"]) for row in return_validity)
+            invalid_share = safe_divide(invalid_amount, total_return_amount)
+            insights.append(
+                {
+                    "title": "Return quality control",
+                    "metric": format_signed_percentage((invalid_share or 0.0) * 100, decimals=1).replace("+", ""),
+                    "body": (
+                        f"Invalid returns currently account for {fmt_inr(invalid_amount)} out of "
+                        f"{fmt_inr(total_return_amount)} total return value."
+                    ),
+                    "note": "Lower is better. This helps separate commercial returns from process leakage.",
                 }
             )
 
@@ -1253,7 +2002,8 @@ class DataManager:
             worst_month = min(trend, key=lambda row: row["net_revenue"])
             insights.append(
                 {
-                    "title": "Monthly range",
+                    "title": "Demand swing",
+                    "metric": f"{best_month['month']} vs {worst_month['month']}",
                     "body": (
                         f"Best month in the filtered range is {best_month['month']} at "
                         f"{fmt_inr(best_month['net_revenue'])}; weakest is {worst_month['month']} at "
@@ -1262,18 +2012,34 @@ class DataManager:
                 }
             )
 
-        insights.append(
-            {
-                "title": "Commercial quality",
-                "body": (
-                    f"This slice is running at {kpis['return_rate_value']:.1f}% value RTO, "
-                    f"{kpis['return_rate_qty']:.1f}% quantity RTO, and "
-                    f"{fmt_inr(kpis['aov'])} AOV."
-                ),
-            }
-        )
+        if return_reasons:
+            top_reason = return_reasons[0]
+            insights.append(
+                {
+                    "title": "Primary return driver",
+                    "metric": clean_text(top_reason["reason"], "Unspecified"),
+                    "body": (
+                        f"The top coded return reason contributes {fmt_inr(top_reason['amount'])} across "
+                        f"{top_reason['orders']:,} unique orders."
+                    ),
+                }
+            )
 
-        return insights
+        if operations["orders_by_weekday"]:
+            busiest_weekday = max(operations["orders_by_weekday"], key=lambda row: row["orders"])
+            insights.append(
+                {
+                    "title": "Order rhythm",
+                    "metric": busiest_weekday["weekday"],
+                    "body": (
+                        f"{busiest_weekday['weekday']} is the strongest order day in this slice with "
+                        f"{busiest_weekday['orders']:,} unique orders and "
+                        f"{fmt_inr(busiest_weekday['net_revenue'])} net revenue."
+                    ),
+                }
+            )
+
+        return insights[:8]
 
     def export_csv(self, df: pd.DataFrame) -> str:
         if df.empty:

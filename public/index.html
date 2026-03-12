@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Bluewud Sales Intelligence</title>
+<title>Sales Trends Dashboard</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
 :root{
@@ -27,7 +27,7 @@
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
 body{
-  font-family:"Aptos","Segoe UI Variable","Segoe UI",sans-serif;
+  font-family:"Product Sans","Google Sans","Aptos","Segoe UI Variable","Segoe UI",sans-serif;
   color:var(--ink);
   background:
     radial-gradient(circle at top left, rgba(13,92,99,.08), transparent 28%),
@@ -56,7 +56,7 @@ button,input,select{font:inherit}
 }
 .hero-copy h1{
   margin:0;
-  font-family:"Georgia","Times New Roman",serif;
+  font-family:"Product Sans","Google Sans","Aptos","Segoe UI Variable","Segoe UI",sans-serif;
   font-size:clamp(32px,4vw,52px);
   line-height:1.04;
   letter-spacing:-.03em;
@@ -212,11 +212,16 @@ button,input,select{font:inherit}
   color:var(--muted);
   font-size:12px;
 }
+.kpi.kpi-primary{
+  background:linear-gradient(180deg, rgba(215,235,230,.92), rgba(255,250,241,.96));
+  border-color:rgba(13,92,99,.26);
+}
 .grid{
   display:grid;
   gap:16px;
   margin-bottom:16px;
 }
+.grid.overview-top{grid-template-columns:.95fr 1.25fr}
 .grid.two{grid-template-columns:1.45fr .95fr}
 .grid.equal{grid-template-columns:1fr 1fr}
 .grid.triple{grid-template-columns:repeat(3,1fr)}
@@ -272,7 +277,19 @@ button,input,select{font:inherit}
   text-transform:uppercase;
   letter-spacing:.08em;
 }
-.insight-list,.scroll-list{
+.table td.empty-cell{
+  padding:20px 12px;
+  color:var(--muted);
+  text-align:center;
+  white-space:normal;
+}
+.insight-list{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:14px;
+  align-items:stretch;
+}
+.scroll-list{
   display:grid;
   gap:12px;
 }
@@ -282,8 +299,29 @@ button,input,select{font:inherit}
   border-radius:16px;
   padding:14px;
 }
+.insight.prominent{
+  padding:20px;
+  min-height:168px;
+  border-radius:20px;
+  background:linear-gradient(180deg, rgba(255,250,241,.96), rgba(242,236,226,.92));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.55);
+}
 .insight strong{display:block;font-size:13px;margin-bottom:6px}
 .insight p{margin:0;color:var(--muted);line-height:1.55;font-size:13px}
+.insight.prominent strong{font-size:15px;letter-spacing:-.02em;margin-bottom:8px}
+.insight-metric{
+  font-size:30px;
+  font-weight:800;
+  letter-spacing:-.04em;
+  color:var(--ink);
+  margin-bottom:8px;
+}
+.insight-meta{
+  margin-top:8px;
+  color:var(--muted);
+  font-size:12px;
+  line-height:1.5;
+}
 .summary-cards{
   display:grid;
   grid-template-columns:repeat(4,minmax(0,1fr));
@@ -308,6 +346,18 @@ button,input,select{font:inherit}
   font-weight:800;
   letter-spacing:-.03em;
 }
+.section-note{
+  display:none;
+  margin:0 0 14px;
+  padding:12px 14px;
+  border-radius:16px;
+  border:1px dashed var(--line);
+  background:rgba(245,236,221,.82);
+  color:var(--muted);
+  font-size:13px;
+  line-height:1.55;
+}
+.section-note.show{display:block}
 .metric-line{
   display:flex;
   justify-content:space-between;
@@ -382,15 +432,16 @@ button,input,select{font:inherit}
 @media (max-width:1180px){
   .hero{grid-template-columns:1fr}
   .filters{grid-template-columns:1fr 1fr 1fr 1fr}
-  .grid.two,.grid.equal,.grid.triple,.summary-cards{grid-template-columns:1fr 1fr}
+  .grid.two,.grid.equal,.grid.triple,.summary-cards,.grid.overview-top{grid-template-columns:1fr 1fr}
   .kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .insight-list{grid-template-columns:1fr}
 }
 @media (max-width:760px){
   .page{padding:12px}
   .shell{border-radius:24px}
   .hero,.toolbar,.content,.tabs,.filters,.status-strip{padding-left:16px;padding-right:16px}
   .filters{grid-template-columns:1fr}
-  .grid.two,.grid.equal,.grid.triple,.summary-cards,.kpi-grid{grid-template-columns:1fr}
+  .grid.two,.grid.equal,.grid.triple,.summary-cards,.kpi-grid,.grid.overview-top,.insight-list{grid-template-columns:1fr}
   .hero-copy h1{font-size:34px}
 }
 </style>
@@ -425,7 +476,7 @@ button,input,select{font:inherit}
   <div class="shell">
     <section class="hero">
       <div class="hero-copy">
-        <h1>Bluewud Sales Intelligence</h1>
+        <h1>Sales Trends Dashboard</h1>
         <p>
           Internal analytics for revenue, returns, platform mix, budget tracking, and operational patterns.
           Every metric is driven from the normalized sales workbook, with unique orders as the primary count lens.
@@ -504,7 +555,7 @@ button,input,select{font:inherit}
     <div class="content">
       <section id="panel-overview" class="panel active">
         <div id="overviewKpis" class="kpi-grid"></div>
-        <div class="grid two">
+        <div class="grid overview-top">
           <div class="card">
             <div class="card-head">
               <h3>Revenue trend</h3>
@@ -539,8 +590,9 @@ button,input,select{font:inherit}
         <div class="card">
           <div class="card-head">
             <h3>Workbook strategic cards</h3>
-            <div class="chip">Static FY layer</div>
+            <div id="summaryChip" class="chip">Static FY layer</div>
           </div>
+          <div id="summarySourceNote" class="section-note"></div>
           <div id="summaryCards" class="summary-cards"></div>
         </div>
       </section>
@@ -642,7 +694,7 @@ button,input,select{font:inherit}
           <div class="card">
             <div class="card-head">
               <h3>Budget vs actual</h3>
-              <div class="chip">FY 2025-26</div>
+              <div id="opsBudgetChip" class="chip">FY 2025-26</div>
             </div>
             <div class="canvas-wrap short"><canvas id="chartBudget"></canvas></div>
           </div>
@@ -654,14 +706,31 @@ button,input,select{font:inherit}
             <div id="operationsMetrics"></div>
           </div>
         </div>
+        <div class="grid two">
+          <div class="card">
+            <div class="card-head">
+              <h3>Monthly return-risk by channel</h3>
+              <div class="chip">Value RTO</div>
+            </div>
+            <div class="canvas-wrap short"><canvas id="chartOpsRto"></canvas></div>
+          </div>
+          <div class="card">
+            <div class="card-head">
+              <h3>Channel operating quality</h3>
+              <div class="chip">Current FY layer</div>
+            </div>
+            <div class="table-wrap"><table class="table" id="tableOpsChannels"></table></div>
+          </div>
+        </div>
       </section>
 
       <section id="panel-fy" class="panel">
+        <div id="fySourceNote" class="section-note"></div>
         <div class="grid two">
           <div class="card">
             <div class="card-head">
               <h3>FY sales comparison</h3>
-              <div class="chip">Workbook summary sheet</div>
+              <div id="fySalesChip" class="chip">Workbook summary sheet</div>
             </div>
             <div class="canvas-wrap"><canvas id="chartFySales"></canvas></div>
           </div>
@@ -677,14 +746,14 @@ button,input,select{font:inherit}
           <div class="card">
             <div class="card-head">
               <h3>Budget tracker</h3>
-              <div class="chip">Scrollable</div>
+              <div id="fyBudgetChip" class="chip">Scrollable</div>
             </div>
             <div class="table-wrap"><table class="table" id="tableBudget"></table></div>
           </div>
           <div class="card">
             <div class="card-head">
               <h3>Strategic observations</h3>
-              <div class="chip">Workbook notes</div>
+              <div id="staticInsightsChip" class="chip">Workbook notes</div>
             </div>
             <div id="staticInsights" class="scroll-list"></div>
           </div>
@@ -724,6 +793,18 @@ function number(value) {
 
 function pct(value) {
   return (Number(value || 0)).toFixed(1) + "%";
+}
+
+function hasValue(value) {
+  return value !== null && value !== undefined && value !== "" && !Number.isNaN(Number(value));
+}
+
+function moneyMaybe(value) {
+  return hasValue(value) ? money(value) : "N/A";
+}
+
+function pctMaybe(value, multiplier = 1) {
+  return hasValue(value) ? pct(Number(value) * multiplier) : "N/A";
 }
 
 function shortLabel(value, max = 28) {
@@ -790,7 +871,7 @@ function makeChart(id, config) {
 }
 
 Chart.defaults.color = "#62707a";
-Chart.defaults.font.family = '"Aptos","Segoe UI Variable","Segoe UI",sans-serif';
+Chart.defaults.font.family = '"Product Sans","Google Sans","Aptos","Segoe UI Variable","Segoe UI",sans-serif';
 Chart.defaults.font.size = 11;
 
 function populateFilters(meta) {
@@ -836,17 +917,21 @@ function renderQuerySummary(filters) {
 
 function renderKpis(kpis) {
   const cards = [
-    ["Net revenue", kpis.net_revenue_formatted, "After returns"],
-    ["Gross sales", kpis.gross_sales_formatted, "Before returns"],
+    ["Total revenue", kpis.gross_sales_formatted, "Gross billed value before returns"],
+    ["Returns value", kpis.return_value_formatted, `${pct(kpis.return_rate_value)} of total revenue`],
+    ["Net revenue after returns", kpis.net_revenue_formatted, "Recoverable revenue after returns"],
     ["Unique orders", number(kpis.unique_orders), "Primary order lens"],
-    ["AOV", kpis.aov_formatted, "Net revenue / unique orders"],
+    ["Average order value", kpis.aov_formatted, "Net revenue / unique orders"],
+    ["Average selling price", kpis.asp_formatted, "Net revenue / net units"],
     ["Net units", number(kpis.sales_volume_net), "Quantity after returns"],
-    ["Return value", kpis.return_value_formatted, `${pct(kpis.return_rate_value)} of gross sales`],
-    ["Return quantity", number(kpis.return_qty), `${pct(kpis.return_rate_qty)} of sold quantity`],
+    ["Returned units", number(kpis.return_qty), `${pct(kpis.return_rate_qty)} of sold quantity`],
     ["Tax collected", kpis.tax_collected_formatted, `${number(kpis.unique_products)} products in slice`],
+    ["Active products", number(kpis.unique_products), `${number(kpis.active_categories)} categories represented`],
+    ["Active platforms", number(kpis.active_platforms), "Channels contributing to this slice"],
+    ["Active categories", number(kpis.active_categories), "Grouped demand mix in view"],
   ];
-  document.getElementById("overviewKpis").innerHTML = cards.map(([label, value, sub]) => `
-    <div class="kpi">
+  document.getElementById("overviewKpis").innerHTML = cards.map(([label, value, sub], index) => `
+    <div class="kpi ${index < 3 ? "kpi-primary" : ""}">
       <div class="label">${label}</div>
       <div class="value">${value}</div>
       <div class="sub">${sub}</div>
@@ -854,37 +939,46 @@ function renderKpis(kpis) {
   `).join("");
 }
 
-function renderInsights(items, targetId) {
+function renderInsights(items, targetId, options = {}) {
   const target = document.getElementById(targetId);
+  const prominent = Boolean(options.prominent);
   const payload = (items || []).map((item) => `
-    <div class="insight">
+    <div class="insight ${prominent ? "prominent" : ""}">
       <strong>${item.title}</strong>
+      ${item.metric ? `<div class="insight-metric">${item.metric}</div>` : ""}
       <p>${item.body}</p>
+      ${item.note ? `<div class="insight-meta">${item.note}</div>` : ""}
     </div>
   `).join("");
   target.innerHTML = payload || '<div class="insight"><strong>No insights</strong><p>No insight rows are available for the current slice.</p></div>';
 }
 
-function renderSummaryCards(cards) {
+function renderSummaryCards(cards, summaryMeta = {}) {
   const target = document.getElementById("summaryCards");
-  target.innerHTML = (cards || []).slice(0, 8).map((card) => `
+  const note = document.getElementById("summarySourceNote");
+  note.textContent = summaryMeta.source_note || "";
+  note.classList.toggle("show", Boolean(summaryMeta.source_note));
+  document.getElementById("summaryChip").textContent = summaryMeta.mode === "computed" ? "Derived FY layer" : "Workbook FY layer";
+  target.innerHTML = (cards || []).map((card) => `
     <div class="summary-card">
       <div class="small">${card.label}</div>
       <div class="big">${card.value}</div>
     </div>
-  `).join("");
+  `).join("") || '<div class="summary-card"><div class="small">No strategic cards</div><div class="big">N/A</div></div>';
 }
 
-function renderTable(targetId, headers, rows) {
+function renderTable(targetId, headers, rows, emptyMessage = "No rows are available for the current slice.") {
   const head = `<thead><tr>${headers.map((item) => `<th>${item}</th>`).join("")}</tr></thead>`;
-  const body = `<tbody>${rows.join("")}</tbody>`;
+  const bodyRows = rows.length ? rows.join("") : `<tr><td class="empty-cell" colspan="${headers.length}">${emptyMessage}</td></tr>`;
+  const body = `<tbody>${bodyRows}</tbody>`;
   document.getElementById(targetId).innerHTML = head + body;
 }
 
 function renderOverview(data) {
+  const summary = data.summary_sheet || {};
   renderKpis(data.kpis);
-  renderInsights(data.insights, "insightList");
-  renderSummaryCards((data.summary_sheet || {}).headline_cards || []);
+  renderInsights(data.insights, "insightList", { prominent: true });
+  renderSummaryCards(summary.headline_cards || [], summary.meta || {});
   document.getElementById("trendFreq").textContent = (data.trend.frequency || "none").toUpperCase();
 
   makeChart("chartTrend", {
@@ -1032,7 +1126,12 @@ function renderReturns(data) {
 
 function renderOperations(data) {
   const operations = data.operations || {};
-  const budgetRows = (data.summary_sheet || {}).budget_vs_achievement || [];
+  const summary = data.summary_sheet || {};
+  const budgetRows = summary.budget_vs_achievement || [];
+  const budgetChartRows = budgetRows.filter((row) => row.month !== "TOTAL");
+  const summaryMeta = summary.meta || {};
+  const rtoRows = (summary.rto_monthly_current || []).filter((row) => row.month !== "TOTAL");
+  const channelPerformanceRows = (summary.channel_performance_current || []).filter((row) => row.channel !== "TOTAL");
   makeChart("chartOperationsMonth", {
     type: "bar",
     data: {
@@ -1057,40 +1156,115 @@ function renderOperations(data) {
   makeChart("chartBudget", {
     type: "bar",
     data: {
-      labels: budgetRows.map((row) => row.month),
+      labels: budgetChartRows.map((row) => row.month),
       datasets: [
-        { label: "Budget", data: budgetRows.map((row) => row.budget), backgroundColor: "rgba(13,92,99,.35)" },
-        { label: "Actual", data: budgetRows.map((row) => row.actual), backgroundColor: RETURN_COLOR },
+        ...(summaryMeta.budget_available
+          ? [{ label: "Budget", data: budgetChartRows.map((row) => row.budget), backgroundColor: "rgba(13,92,99,.35)" }]
+          : []),
+        { label: summaryMeta.budget_available ? "Actual" : "Actual (derived)", data: budgetChartRows.map((row) => row.actual), backgroundColor: RETURN_COLOR },
       ],
     },
     options: { responsive: true, maintainAspectRatio: false, scales: { y: { ticks: { callback: (v) => money(v) } } } },
   });
+  document.getElementById("opsBudgetChip").textContent = summaryMeta.budget_available ? "Budget vs actual" : "Actual only";
 
   const kpis = data.kpis || {};
   document.getElementById("operationsMetrics").innerHTML = [
-    ["Gross sales", kpis.gross_sales_formatted],
-    ["Net revenue", kpis.net_revenue_formatted],
+    ["Total revenue", kpis.gross_sales_formatted],
+    ["Returns value", kpis.return_value_formatted],
+    ["Net revenue after returns", kpis.net_revenue_formatted],
+    ["Unique orders", number(kpis.unique_orders)],
+    ["Returned units", number(kpis.return_qty)],
     ["Tax collected", kpis.tax_collected_formatted],
     ["AOV", kpis.aov_formatted],
     ["ASP", kpis.asp_formatted],
     ["Value return rate", pct(kpis.return_rate_value)],
     ["Quantity return rate", pct(kpis.return_rate_qty)],
+    ["Active products", number(kpis.unique_products)],
+    ["Active platforms", number(kpis.active_platforms)],
+    ["Active categories", number(kpis.active_categories)],
   ].map(([label, value]) => `<div class="metric-line"><span>${label}</span><strong>${value}</strong></div>`).join("");
+
+  const rtoSeries = [
+    ["amazon", "Amazon", "#F59E0B"],
+    ["flipkart", "Flipkart", "#2563EB"],
+    ["pepperfry", "Pepperfry", "#EA580C"],
+    ["reliance", "Reliance", "#166534"],
+    ["shopify", "Shopify", "#16A34A"],
+    ["myntra", "Myntra", "#DB2777"],
+    ["blended", "Blended", "#973b3b"],
+  ].filter(([key]) => rtoRows.some((row) => hasValue(row[key])));
+
+  makeChart("chartOpsRto", {
+    type: "line",
+    data: {
+      labels: rtoRows.map((row) => row.month),
+      datasets: rtoSeries.map(([key, label, color]) => ({
+        label,
+        data: rtoRows.map((row) => hasValue(row[key]) ? Number(row[key]) * 100 : null),
+        borderColor: color,
+        backgroundColor: color,
+        tension: .28,
+        spanGaps: true,
+        borderDash: key === "blended" ? [6, 4] : [],
+      })),
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: { y: { ticks: { callback: (value) => pct(value) } } },
+    },
+  });
+
+  renderTable("tableOpsChannels",
+    ["Channel", "Gross sales", "Returns", "Net sales", "Value RTO", "Revenue share", "Net qty", "Trend"],
+    channelPerformanceRows.map((row) => `
+      <tr>
+        <td>${row.channel}</td>
+        <td>${moneyMaybe(row.gross_sales)}</td>
+        <td>${moneyMaybe(row.returns)}</td>
+        <td>${moneyMaybe(row.net_sales)}</td>
+        <td>${pctMaybe(row.rto_rate, 100)}</td>
+        <td>${pctMaybe(row.revenue_share, 100)}</td>
+        <td>${hasValue(row.net_qty) ? number(row.net_qty) : "N/A"}</td>
+        <td>${row.trend || "N/A"}</td>
+      </tr>
+    `),
+    "No channel quality rows are available for the loaded source."
+  );
 }
 
 function renderFyLens(data) {
   const summary = data.summary_sheet || {};
   const fyRows = summary.monthly_fy_sales || [];
+  const fyChartRows = fyRows.filter((row) => row.month !== "TOTAL");
+  const summaryMeta = summary.meta || {};
+  const fySeries = (summaryMeta.fy_series || []).length
+    ? summaryMeta.fy_series
+    : Object.keys(fyChartRows[0] || {})
+        .filter((key) => key.startsWith("fy_"))
+        .map((key, index) => ({
+          key,
+          label: key.replaceAll("_", " ").toUpperCase(),
+          color: [MONEY_COLOR, RETURN_COLOR, GOOD_COLOR, BAD_COLOR, "#7f5539"][index % 5],
+        }));
+  document.getElementById("fySourceNote").textContent = summaryMeta.source_note || "";
+  document.getElementById("fySourceNote").classList.toggle("show", Boolean(summaryMeta.source_note));
+  document.getElementById("fySalesChip").textContent = summaryMeta.mode === "computed" ? "Derived FY view" : "Workbook summary sheet";
+  document.getElementById("fyBudgetChip").textContent = summaryMeta.budget_available ? "Budget tracker" : "Actual + YoY";
+  document.getElementById("staticInsightsChip").textContent = summaryMeta.mode === "computed" ? "Derived notes" : "Workbook notes";
+
   makeChart("chartFySales", {
     type: "line",
     data: {
-      labels: fyRows.map((row) => row.month),
-      datasets: [
-        { label: "FY 22-23", data: fyRows.map((row) => row.fy_2022_23), borderColor: "#7f5539", tension: .3 },
-        { label: "FY 23-24", data: fyRows.map((row) => row.fy_2023_24), borderColor: "#4f772d", tension: .3 },
-        { label: "FY 24-25", data: fyRows.map((row) => row.fy_2024_25), borderColor: MONEY_COLOR, tension: .3 },
-        { label: "FY 25-26", data: fyRows.map((row) => row.fy_2025_26), borderColor: RETURN_COLOR, tension: .3 },
-      ],
+      labels: fyChartRows.map((row) => row.month),
+      datasets: fySeries.map((series) => ({
+        label: series.label,
+        data: fyChartRows.map((row) => row[series.key]),
+        borderColor: series.color,
+        backgroundColor: series.color,
+        tension: .3,
+      })),
     },
     options: { responsive: true, maintainAspectRatio: false, scales: { y: { ticks: { callback: (v) => money(v) } } } },
   });
@@ -1109,11 +1283,11 @@ function renderFyLens(data) {
     (summary.budget_vs_achievement || []).map((row) => `
       <tr>
         <td>${row.month}</td>
-        <td>${money(row.budget)}</td>
-        <td>${money(row.actual)}</td>
-        <td>${money(row.variance)}</td>
-        <td>${pct(Number(row.achievement_pct || 0) * 100)}</td>
-        <td>${pct(Number(row.yoy_change || 0) * 100)}</td>
+        <td>${moneyMaybe(row.budget)}</td>
+        <td>${moneyMaybe(row.actual)}</td>
+        <td>${moneyMaybe(row.variance)}</td>
+        <td>${pctMaybe(row.achievement_pct, 100)}</td>
+        <td>${pctMaybe(row.yoy_change, 100)}</td>
       </tr>
     `)
   );

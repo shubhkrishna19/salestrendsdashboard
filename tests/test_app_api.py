@@ -65,6 +65,91 @@ def sample_snapshot_frame() -> pd.DataFrame:
     return frame[app_api.SNAPSHOT_COLUMNS]
 
 
+def sample_fy_snapshot_frame() -> pd.DataFrame:
+    frame = pd.DataFrame(
+        {
+            "order_date": pd.to_datetime(["2025-04-10", "2025-04-11", "2025-03-15", "2025-03-20"]),
+            "platform_raw": [
+                "Amazon Online Sale",
+                "Flipkart Online Sale",
+                "Amazon Online Sale",
+                "Flipkart Online Sale",
+            ],
+            "platform_label": ["Amazon", "Flipkart", "Amazon", "Flipkart"],
+            "category": ["Beds", "Chairs", "Beds", "Chairs"],
+            "product": ["Alpha Bed", "Beta Chair", "Alpha Bed", "Beta Chair"],
+            "sku": ["ALPHA-1", "BETA-1", "ALPHA-1", "BETA-1"],
+            "sale_qty": [2.0, 1.0, 1.0, 1.0],
+            "return_qty_signed": [0.0, -1.0, 0.0, 0.0],
+            "return_qty": [0.0, 1.0, 0.0, 0.0],
+            "gross_sales": [1000.0, 800.0, 700.0, 500.0],
+            "return_value_signed": [0.0, -100.0, 0.0, 0.0],
+            "return_value": [0.0, 100.0, 0.0, 0.0],
+            "net_qty": [2.0, 0.0, 1.0, 1.0],
+            "net_revenue": [1000.0, 700.0, 700.0, 500.0],
+            "tax": [180.0, 144.0, 126.0, 90.0],
+            "order_id": ["ORD-1", "ORD-2", "ORD-3", "ORD-4"],
+            "return_reason": ["None", "Damaged", "None", "None"],
+            "return_validity": ["Valid", "Invalid", "Valid", "Valid"],
+            "fy": ["FY2025-26", "FY2025-26", "FY2024-25", "FY2024-25"],
+            "month": ["2025-04", "2025-04", "2025-03", "2025-03"],
+            "weekday": ["Thursday", "Friday", "Saturday", "Thursday"],
+        }
+    )
+    return frame[app_api.SNAPSHOT_COLUMNS]
+
+
+def sample_sku_search_snapshot_frame() -> pd.DataFrame:
+    frame = pd.DataFrame(
+        {
+            "order_date": pd.to_datetime(["2025-04-10", "2025-04-11", "2025-04-12", "2025-04-13"]),
+            "platform_raw": [
+                "Flipkart Online Sale",
+                "Flipkart Online Sale",
+                "Amazon Online Sale",
+                "Amazon Online Sale",
+            ],
+            "platform_label": ["Flipkart", "Flipkart", "Amazon", "Amazon"],
+            "category": ["Study Tables", "Study Tables", "Shoe Racks", "Shoe Racks"],
+            "product": [
+                "Bluewud Corbyn L Shape Study Table-Maple",
+                "Bluewud Corbyn L Shape Study Ta-Maple-CL",
+                "Bluewud Kaspen Shoe Rack Wenge(FW)",
+                "Bluewud Kaspen Shoe Rack Maple (MF)",
+            ],
+            "sku": ["ST-CBN-LSMF", "ST-CBN-LSMF-CL", "SR-KPN-FW", "SR-KPN-MF"],
+            "sale_qty": [1.0, 1.0, 1.0, 1.0],
+            "return_qty_signed": [0.0, 0.0, 0.0, 0.0],
+            "return_qty": [0.0, 0.0, 0.0, 0.0],
+            "gross_sales": [1000.0, 1100.0, 900.0, 950.0],
+            "return_value_signed": [0.0, 0.0, 0.0, 0.0],
+            "return_value": [0.0, 0.0, 0.0, 0.0],
+            "net_qty": [1.0, 1.0, 1.0, 1.0],
+            "net_revenue": [1000.0, 1100.0, 900.0, 950.0],
+            "tax": [180.0, 198.0, 162.0, 171.0],
+            "order_id": ["ORD-10", "ORD-11", "ORD-12", "ORD-13"],
+            "return_reason": ["None", "None", "None", "None"],
+            "return_validity": ["Valid", "Valid", "Valid", "Valid"],
+            "fy": ["FY2025-26", "FY2025-26", "FY2025-26", "FY2025-26"],
+            "month": ["2025-04", "2025-04", "2025-04", "2025-04"],
+            "weekday": ["Thursday", "Friday", "Saturday", "Sunday"],
+        }
+    )
+    return frame[app_api.SNAPSHOT_COLUMNS]
+
+
+def build_manager(frame: pd.DataFrame, summary_sheet: dict | None = None) -> app_api.DataManager:
+    manager = app_api.DataManager.__new__(app_api.DataManager)
+    manager._df = frame.copy()
+    manager._loaded_at = pd.Timestamp("2026-03-12").to_pydatetime()
+    manager._source = "https://example.com/data.xlsx"
+    manager._source_type = "url"
+    manager._summary_sheet = summary_sheet or {}
+    manager._load_error = None
+    manager._data_version = "test"
+    return manager
+
+
 @pytest.fixture(scope="session")
 def dm() -> app_api.DataManager:
     return app_api._dm
@@ -161,7 +246,7 @@ def test_root_serves_dashboard_shell(client: TestClient) -> None:
     response = client.get("/")
 
     assert response.status_code == 200
-    assert "Bluewud Sales Intelligence" in response.text
+    assert "Sales Trends Dashboard" in response.text
     assert 'id="overviewKpis"' in response.text
     assert 'id="chartTrend"' in response.text
 
@@ -200,6 +285,67 @@ def test_summary_sheet_endpoint_returns_dict(client: TestClient) -> None:
     assert response.status_code == 200
     payload = response.json()
     assert isinstance(payload, dict)
+
+
+def test_summary_sheet_fallback_populates_when_workbook_sheet_missing() -> None:
+    manager = build_manager(sample_fy_snapshot_frame(), summary_sheet={})
+
+    payload = manager.summary_sheet()
+
+    assert payload["meta"]["mode"] == "computed"
+    assert payload["meta"]["budget_available"] is False
+    assert len(payload["headline_cards"]) >= 10
+    assert payload["monthly_fy_sales"]
+    assert payload["channel_growth"]
+    assert payload["budget_vs_achievement"]
+    assert payload["channel_performance_current"]
+    assert payload["rto_monthly_current"]
+    assert payload["insights"]
+    assert any(card["label"].startswith("Total revenue") for card in payload["headline_cards"])
+
+
+def test_dynamic_insights_expand_commercial_explanations() -> None:
+    manager = build_manager(sample_fy_snapshot_frame(), summary_sheet={})
+
+    insights = manager.dynamic_insights(sample_fy_snapshot_frame())
+
+    assert len(insights) >= 5
+    assert any(item.get("metric") for item in insights)
+    assert {item["title"] for item in insights} >= {
+        "Revenue converted to net",
+        "Category leader",
+        "Hero product",
+    }
+
+
+def test_product_query_matches_sku_prefix_and_compact_forms() -> None:
+    manager = build_manager(sample_sku_search_snapshot_frame(), summary_sheet={})
+
+    prefixed = manager.apply_filters({"product_query": "ST-CBN-LSMF"})
+    compact = manager.apply_filters({"product_query": "STCBNLSMF"})
+    family = manager.apply_filters({"product_query": "SR-KPN"})
+    enriched = manager._ensure_search_dimensions(manager._df.copy())
+    variant_row = enriched.loc[enriched["sku"] == "ST-CBN-LSMF-CL"].iloc[0]
+
+    assert set(prefixed["sku"]) == {"ST-CBN-LSMF", "ST-CBN-LSMF-CL"}
+    assert set(compact["sku"]) == {"ST-CBN-LSMF", "ST-CBN-LSMF-CL"}
+    assert set(family["sku"]) == {"SR-KPN-FW", "SR-KPN-MF"}
+    assert variant_row["sku_base"] == "ST-CBN-LSMF"
+    assert variant_row["sku_extension"] == "CL"
+
+
+def test_search_products_returns_sku_and_product_suggestions() -> None:
+    manager = build_manager(sample_sku_search_snapshot_frame(), summary_sheet={})
+
+    sku_suggestions = manager.search_products({}, "ST-CBN-LSMF")
+    product_suggestions = manager.search_products({}, "Kaspen")
+
+    assert sku_suggestions[:2] == ["ST-CBN-LSMF", "ST-CBN-LSMF-CL"]
+    assert "Bluewud Corbyn L Shape Study Table-Maple" in sku_suggestions
+    assert {
+        "Bluewud Kaspen Shoe Rack Maple (MF)",
+        "Bluewud Kaspen Shoe Rack Wenge(FW)",
+    }.issubset(set(product_suggestions))
 
 
 def test_local_workbook_summary_sheet_parses_expected_shape() -> None:

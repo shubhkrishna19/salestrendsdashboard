@@ -23,7 +23,7 @@ def test_vercel_entrypoint_uses_root_app() -> None:
 def test_vercel_static_root_shell_exists() -> None:
     public_index = (ROOT / "public" / "index.html").read_text(encoding="utf-8")
 
-    assert "Bluewud Sales Intelligence" in public_index
+    assert "Sales Trends Dashboard" in public_index
     assert 'id="overviewKpis"' in public_index
 
 
