@@ -46,8 +46,8 @@ button,input,select{font:inherit}
 }
 .hero{
   display:grid;
-  grid-template-columns:2fr 1.1fr;
-  gap:24px;
+  grid-template-columns:1fr;
+  gap:16px;
   padding:28px;
   background:
     linear-gradient(135deg, rgba(13,92,99,.95), rgba(16,39,55,.98)),
@@ -63,33 +63,68 @@ button,input,select{font:inherit}
 }
 .hero-copy p{
   margin:14px 0 0;
-  max-width:720px;
+  max-width:860px;
   color:rgba(247,243,234,.82);
   font-size:15px;
   line-height:1.6;
 }
-.hero-meta{
-  display:grid;
-  gap:12px;
-  align-content:start;
+.app-footer{
+  padding:0 24px 28px;
+  border-top:1px solid rgba(212,197,173,.72);
 }
-.meta-card{
-  background:rgba(255,255,255,.08);
-  border:1px solid rgba(255,255,255,.12);
+.app-footer details{
+  background:rgba(245,236,221,.44);
+  border:1px solid rgba(212,197,173,.82);
+  border-radius:20px;
+  padding:0 18px 18px;
+}
+.footer-toggle{
+  list-style:none;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:18px 0 12px;
+  color:var(--muted);
+  font-size:13px;
+  font-weight:700;
+  letter-spacing:.05em;
+  text-transform:uppercase;
+}
+.footer-toggle::-webkit-details-marker{display:none}
+.footer-toggle::after{
+  content:"+";
+  font-size:20px;
+  line-height:1;
+  color:var(--accent);
+}
+.app-footer details[open] .footer-toggle::after{content:"−"}
+.footer-grid{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:14px;
+}
+.footer-meta-card{
+  background:rgba(255,250,241,.9);
+  border:1px solid var(--line);
   border-radius:18px;
   padding:16px;
 }
-.meta-label{
+.footer-meta-label{
   display:block;
-  color:rgba(247,243,234,.62);
+  color:var(--muted);
   font-size:11px;
   text-transform:uppercase;
   letter-spacing:.08em;
   margin-bottom:8px;
+  font-weight:700;
 }
-.meta-value{
-  font-size:15px;
-  line-height:1.45;
+.footer-meta-value{
+  font-size:14px;
+  line-height:1.55;
+  color:var(--ink);
+  word-break:break-word;
 }
 .toolbar{
   display:flex;
@@ -432,11 +467,11 @@ button,input,select{font:inherit}
 .modal-card p{margin:0 0 18px;color:var(--muted);line-height:1.6}
 .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}
 @media (max-width:1180px){
-  .hero{grid-template-columns:1fr}
   .filters{grid-template-columns:1fr 1fr 1fr 1fr}
   .grid.two,.grid.equal,.grid.triple,.grid.product-top,.summary-cards,.grid.overview-top{grid-template-columns:1fr 1fr}
   .kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .insight-list{grid-template-columns:1fr}
+  .footer-grid{grid-template-columns:1fr 1fr}
   .grid.product-top .card:last-child{grid-column:auto}
 }
 @media (max-width:760px){
@@ -445,6 +480,8 @@ button,input,select{font:inherit}
   .hero,.toolbar,.content,.tabs,.filters,.status-strip{padding-left:16px;padding-right:16px}
   .filters{grid-template-columns:1fr}
   .grid.two,.grid.equal,.grid.triple,.grid.product-top,.summary-cards,.kpi-grid,.grid.overview-top,.insight-list{grid-template-columns:1fr}
+  .footer-grid{grid-template-columns:1fr}
+  .app-footer{padding:0 16px 20px}
   .hero-copy h1{font-size:34px}
   .grid.product-top .card:last-child{grid-column:auto}
 }
@@ -485,20 +522,6 @@ button,input,select{font:inherit}
           Internal analytics for revenue, returns, platform mix, budget tracking, and operational patterns.
           Every metric is driven from the normalized sales workbook, with unique orders as the primary count lens.
         </p>
-      </div>
-      <div class="hero-meta">
-        <div class="meta-card">
-          <span class="meta-label">Data Source</span>
-          <div id="metaSource" class="meta-value">Loading...</div>
-        </div>
-        <div class="meta-card">
-          <span class="meta-label">Loaded State</span>
-          <div id="metaLoaded" class="meta-value">Checking health...</div>
-        </div>
-        <div class="meta-card">
-          <span class="meta-label">Snapshot Path</span>
-          <div class="meta-value">Fast runtime path enabled for repeated filtering and future Vercel/AppSail deployment.</div>
-        </div>
       </div>
     </section>
 
@@ -764,6 +787,25 @@ button,input,select{font:inherit}
         </div>
       </section>
     </div>
+    <footer class="app-footer">
+      <details>
+        <summary class="footer-toggle">Runtime Details</summary>
+        <div class="footer-grid">
+          <div class="footer-meta-card">
+            <span class="footer-meta-label">Data Source</span>
+            <div id="metaSource" class="footer-meta-value">Loading...</div>
+          </div>
+          <div class="footer-meta-card">
+            <span class="footer-meta-label">Loaded State</span>
+            <div id="metaLoaded" class="footer-meta-value">Checking health...</div>
+          </div>
+          <div class="footer-meta-card">
+            <span class="footer-meta-label">Snapshot Path</span>
+            <div class="footer-meta-value">Fast runtime path enabled for repeated filtering and future Vercel/AppSail deployment.</div>
+          </div>
+        </div>
+      </details>
+    </footer>
   </div>
 </div>
 
