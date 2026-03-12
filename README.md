@@ -130,7 +130,7 @@ Why this is the better long-term choice:
 Vercel is the first deployment target for verification.
 
 1. Set `DATA_URL` in the Vercel project environment variables.
-2. Keep `app.py`, `pyproject.toml`, and `.python-version` in place so Vercel can detect the root FastAPI app and run the build hook.
+2. Keep `api/index.py`, `app.py`, `pyproject.toml`, and `.python-version` in place so Vercel can build the Python API function and run the build hook.
 3. Deploy the repo.
 4. Validate:
    - `/api/health`
@@ -141,8 +141,10 @@ Vercel is the first deployment target for verification.
 Why this works:
 
 - `app.py` exposes the FastAPI app for Vercel's Python runtime.
+- `api/index.py` routes Vercel API traffic into the shared FastAPI app.
+- `vercel.json` rewrites `/api/*` requests into the single Python function so FastAPI can serve all API endpoints.
 - `build_snapshot.py` refreshes the snapshot during build so runtime requests do not need to parse the workbook.
-- Vercel can detect the root `app.py` entrypoint without a custom API directory layout.
+- `vercel.json` applies the function timeout to `api/index.py`.
 
 Windows note:
 

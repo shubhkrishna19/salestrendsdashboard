@@ -136,6 +136,27 @@ def test_dashboard_api_contract(client: TestClient) -> None:
     assert sorted(payload["returns"].keys()) == ["by_platform", "by_reason", "trend", "validity"]
 
 
+def test_unprefixed_health_route_is_normalized_for_vercel_function_mount(client: TestClient) -> None:
+    response = client.get("/health")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+
+
+def test_unprefixed_dashboard_route_is_normalized_for_vercel_function_mount(client: TestClient) -> None:
+    response = client.get("/dashboard")
+
+    assert response.status_code == 200
+    assert "kpis" in response.json()
+
+
+def test_rewritten_vercel_api_route_query_is_normalized(client: TestClient) -> None:
+    response = client.get("/api", params={"route": "health"})
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+
+
 def test_root_serves_dashboard_shell(client: TestClient) -> None:
     response = client.get("/")
 

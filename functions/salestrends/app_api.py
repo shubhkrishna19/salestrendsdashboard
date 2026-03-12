@@ -1297,6 +1297,17 @@ app.add_middleware(
 )
 
 
+@app.middleware("http")
+async def normalize_vercel_api_path(request: Request, call_next):
+    path = request.scope.get("path", "")
+    route_override = request.query_params.get("route", "").strip("/")
+    if route_override and path == "/api":
+        request.scope["path"] = f"/api/{route_override}"
+    elif path and path != "/" and not path.startswith("/api"):
+        request.scope["path"] = f"/api{path}"
+    return await call_next(request)
+
+
 def cached_response(endpoint: str, params: Dict[str, Any], builder: Any) -> Any:
     key = build_cache_key(endpoint, params, _dm.version)
     cached = _cache.get(key)

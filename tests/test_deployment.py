@@ -8,10 +8,15 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from api.index import app as vercel_index_app
 import app as root_app
 import appsail_main
 from scripts import build_appsail_image
 from scripts import package_appsail
+
+
+def test_vercel_entrypoint_uses_root_app() -> None:
+    assert vercel_index_app is root_app.app
 
 
 def test_vercel_static_root_shell_exists() -> None:
@@ -35,6 +40,18 @@ def test_root_fastapi_entrypoint_exposes_dashboard_and_api_routes() -> None:
     assert "/api/health" in route_paths
     assert "/api/dashboard" in route_paths
     assert "/api/export" in route_paths
+
+
+def test_vercel_config_targets_python_api_functions() -> None:
+    vercel_config = json.loads((ROOT / "vercel.json").read_text(encoding="utf-8"))
+
+    assert vercel_config["functions"]["api/index.py"]["maxDuration"] == 120
+    assert vercel_config["rewrites"] == [
+        {
+            "source": "/api/:route*",
+            "destination": "/api?route=:route*",
+        }
+    ]
 
 
 def test_vercel_python_runtime_is_declared() -> None:
