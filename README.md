@@ -96,9 +96,19 @@ This verifies:
 
 Primary runtime configuration:
 
-- `DATA_URL`: public Google Drive, SharePoint, OneDrive, or direct workbook URL
+- `ORDER_HUB_BASE_URL`: optional live SSOT source. Set this to the base AppSail URL for OrderHub dev or prod, without needing a trailing slash.
+- `DATA_URL`: recommended workbook fallback. Keep this populated in AppSail even when `ORDER_HUB_BASE_URL` is enabled so SalesTrends can fall back cleanly if the bridge is unavailable or invalid.
 - `SHEET_NAME`: defaults to `Final Sale Data`
 - `SUMMARY_SHEET_NAME`: defaults to `Sales Analytics Dashboard`
+
+OrderHub analytics bridge contract:
+
+- Endpoint: `GET /api/analytics/salestrends-snapshot.csv`
+- Format: CSV row feed, not workbook bytes
+- Required columns: `order_date`, `platform_raw`, `category`, `product`, `sku`, `sale_qty`, `return_qty_signed`, `gross_sales`, `return_value_signed`, `tax`, `order_id`, `return_reason`, `return_validity`
+- Return semantics: `return_qty_signed` and `return_value_signed` must be signed values (`0` or negative)
+- SalesTrends derives `platform_label`, `return_qty`, `return_value`, `net_qty`, `net_revenue`, `fy`, `month`, and `weekday` locally so the bridge stays small and consistent with the workbook-native model
+- If the OrderHub payload is incomplete or invalid, the app logs the bridge failure and falls through to the normal workbook/GitHub/local source chain
 
 Optional fallback configuration:
 
@@ -190,6 +200,37 @@ Current local limitation:
 
 - This machine does not have Docker installed, so the custom AppSail image build cannot be smoke-tested here yet.
 - The repo includes the container build scripts, Dockerfile, and config template, but the final custom-runtime verification requires Docker or a CI runner with Docker.
+
+## AppSail OrderHub Smoke Checklist
+
+Set these runtime env vars before deploy review:
+
+- `ORDER_HUB_BASE_URL`: OrderHub AppSail base URL for the target lane (`https://...`)
+- `DATA_URL`: workbook fallback URL
+- `SHEET_NAME`: `Final Sale Data` unless the source workbook changes
+- `SUMMARY_SHEET_NAME`: `Sales Analytics Dashboard` unless the workbook changes
+- `GITHUB_TOKEN`: only if private GitHub workbook fallback is intentionally used
+- `GITHUB_REPO`: only if private GitHub workbook fallback is intentionally used
+- `DATA_FILE`: only if the fallback workbook file name changes from `data.xlsx`
+- `SNAPSHOT_FILE`: optional override
+- `SNAPSHOT_META_FILE`: optional override
+
+Post-deploy smoke test:
+
+1. Open `/api/health` and confirm `status = ok`, `rows > 0`, `unique_orders > 0`, and `source_type` is `order_hub` when the bridge is healthy.
+2. If `source_type` is not `order_hub`, confirm it falls back to `url`, `github`, or `local` instead of `none`; this proves the workbook lane is still intact.
+3. Open `/api/dashboard` and confirm `200` plus populated `kpis`, `platforms`, `top_products`, and `summary_sheet` keys.
+4. Open `/api/filters` and confirm the date range, platform list, and `data_source` metadata load.
+5. Trigger `/api/reload` once and confirm the app reloads without clearing the dataset.
+6. In the UI, apply a platform filter and a product query and confirm the dashboard recalculates instead of going empty.
+7. In the UI, verify workbook-derived strategic sections still render via computed fallback even though OrderHub only provides row-level analytics.
+8. Record the final `source` and `source_type` values for the deploy review note.
+
+Bridge readiness note:
+
+- No additional bridge code change is required for AppSail to talk to OrderHub dev or prod.
+- The only runtime requirement is setting `ORDER_HUB_BASE_URL` while keeping a workbook fallback (`DATA_URL` or equivalent fallback source) configured.
+- Existing load order already preserves the workbook-native fallback chain if the OrderHub contract is missing, invalid, or unavailable.
 
 ## Operational rules
 
