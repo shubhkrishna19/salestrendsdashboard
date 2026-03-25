@@ -559,16 +559,14 @@ button,input,select{font:inherit}
         <label for="filterEnd">To</label>
         <input id="filterEnd" class="input" type="date">
       </div>
-      <div class="field">
-        <label>Current Query</label>
-        <div id="querySummary" class="pill">All data</div>
-      </div>
     </div>
 
     <div class="status-strip">
       <div class="pill"><span class="dot" id="statusDot"></span><span id="statusText">Checking data health...</span></div>
       <div class="pill" id="statusRows">Rows: --</div>
       <div class="pill" id="statusOrders">Unique orders: --</div>
+      <div class="pill" id="statusRange">Available data: --</div>
+      <div class="pill" id="statusFrequency">Trend mode: --</div>
       <div class="pill" id="statusLoadedAt">Loaded: --</div>
     </div>
 
@@ -1003,8 +1001,15 @@ function populateFilters(meta) {
   });
 
   if (meta.date_range) {
+    document.getElementById("filterStart").min = meta.date_range.min;
+    document.getElementById("filterStart").max = meta.date_range.max;
+    document.getElementById("filterEnd").min = meta.date_range.min;
+    document.getElementById("filterEnd").max = meta.date_range.max;
     document.getElementById("filterStart").value = meta.date_range.min;
     document.getElementById("filterEnd").value = meta.date_range.max;
+  }
+  if (state.health) {
+    renderHealth(state.health);
   }
   persistCache();
 }
@@ -1019,17 +1024,23 @@ function renderHealth(health) {
   document.getElementById("statusText").textContent = health.data_loaded ? "Dataset healthy" : "Dataset unavailable";
   document.getElementById("statusRows").textContent = `Rows: ${number(health.rows)}`;
   document.getElementById("statusOrders").textContent = `Unique orders: ${number(health.unique_orders)}`;
+  const range = state.filtersMeta && state.filtersMeta.date_range
+    ? `${state.filtersMeta.date_range.min} to ${state.filtersMeta.date_range.max}`
+    : "Unknown";
+  document.getElementById("statusRange").textContent = `Available data: ${range}`;
   document.getElementById("statusLoadedAt").textContent = health.loaded_at ? `Loaded: ${health.loaded_at}` : "Loaded: --";
   persistCache();
 }
 
 function renderQuerySummary(filters) {
+  const target = document.getElementById("querySummary");
+  if (!target) return;
   const bits = [];
   if (filters.platform) bits.push(filters.platform);
   if (filters.category) bits.push(filters.category);
   if (filters.product_query) bits.push(`Product contains "${filters.product_query}"`);
   if (filters.start_date && filters.end_date) bits.push(`${filters.start_date} to ${filters.end_date}`);
-  document.getElementById("querySummary").textContent = bits.length ? bits.join(" | ") : "All data";
+  target.textContent = bits.length ? bits.join(" | ") : "All data";
 }
 
 function renderKpis(kpis) {
@@ -1097,6 +1108,7 @@ function renderOverview(data) {
   renderInsights(data.insights, "insightList", { prominent: true });
   renderSummaryCards(summary.headline_cards || [], summary.meta || {});
   document.getElementById("trendFreq").textContent = (data.trend.frequency || "none").toUpperCase();
+  document.getElementById("statusFrequency").textContent = `Trend mode: ${(data.trend.frequency || "none").toUpperCase()}`;
 
   makeChart("chartTrend", {
     type: "line",
@@ -1588,15 +1600,17 @@ async function boot() {
   showLoader("Preparing Sales Trends Dashboard...");
   try {
     document.getElementById("filterProduct").addEventListener("input", queueProductSuggestions);
+    const cached = readCache();
     const restored = restoreCachedView();
     const latestHealth = await loadHealth();
+    const cachedHealth = cached && cached.health ? cached.health : null;
     const cacheMatchesServer = restored
       && state.dashboard
-      && state.health
+      && cachedHealth
       && latestHealth
-      && state.health.loaded_at === latestHealth.loaded_at
-      && state.health.source === latestHealth.source
-      && state.health.source_type === latestHealth.source_type;
+      && cachedHealth.loaded_at === latestHealth.loaded_at
+      && cachedHealth.source === latestHealth.source
+      && cachedHealth.source_type === latestHealth.source_type;
     await loadFilters();
     if (restored && cacheMatchesServer) {
       hideLoader();

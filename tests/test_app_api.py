@@ -330,6 +330,27 @@ def test_summary_sheet_fallback_populates_when_workbook_sheet_missing() -> None:
     assert any(card["label"].startswith("Total revenue") for card in payload["headline_cards"])
 
 
+def test_summary_sheet_for_filtered_scope_uses_computed_view() -> None:
+    workbook_summary = {
+        "headline_cards": [{"label": "Workbook card", "value": "Workbook total"}],
+        "monthly_fy_sales": [{"month": "Apr", "fy_2025_26": 999999}],
+        "channel_performance_current": [],
+        "budget_vs_achievement": [],
+        "rto_monthly_current": [],
+        "channel_growth": [],
+        "insights": [],
+    }
+    manager = build_manager(sample_fy_snapshot_frame(), summary_sheet=workbook_summary)
+    filters = {"product_query": "Alpha Bed"}
+    scoped_df = manager.apply_filters(filters)
+
+    payload = manager.summary_sheet_for(filters, scoped_df)
+
+    assert payload["meta"]["mode"] == "computed"
+    assert payload["headline_cards"][0]["value"] != "Workbook total"
+    assert payload["monthly_fy_sales"][0]["fy_2025_26"] != 999999
+
+
 def test_dynamic_insights_expand_commercial_explanations() -> None:
     manager = build_manager(sample_fy_snapshot_frame(), summary_sheet={})
 

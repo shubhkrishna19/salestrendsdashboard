@@ -671,6 +671,35 @@ class DataManager:
         merged["meta"] = self._summary_sheet_metadata(merged, mode)
         return merged
 
+    def summary_sheet_for(self, filters: Dict[str, Any], df: Optional[pd.DataFrame] = None) -> Dict[str, Any]:
+        if not self.ready:
+            return {}
+        scoped_df = df if df is not None else self.apply_filters(filters)
+        if self._filters_change_scope(filters):
+            summary = self._computed_summary_sheet(scoped_df)
+            summary["meta"] = self._summary_sheet_metadata(summary, "computed")
+            return summary
+        return self.summary_sheet()
+
+    def _filters_change_scope(self, filters: Dict[str, Any]) -> bool:
+        if not self.ready:
+            return False
+        for key in ("platform", "category", "product", "product_query"):
+            if clean_text(filters.get(key), ""):
+                return True
+        date_series = self._df["order_date"].dropna()
+        if date_series.empty:
+            return False
+        full_start = date_series.min().strftime("%Y-%m-%d")
+        full_end = date_series.max().strftime("%Y-%m-%d")
+        start_date = clean_text(filters.get("start_date"), "")
+        end_date = clean_text(filters.get("end_date"), "")
+        if start_date and start_date != full_start:
+            return True
+        if end_date and end_date != full_end:
+            return True
+        return False
+
     def _summary_sheet_metadata(self, summary: Dict[str, Any], mode: str) -> Dict[str, Any]:
         fy_rows = [row for row in summary.get("monthly_fy_sales", []) if row.get("month") != "TOTAL"]
         sample_row = fy_rows[0] if fy_rows else (summary.get("monthly_fy_sales", [{}])[:1] or [{}])[0]
@@ -2190,6 +2219,7 @@ def cached_response(endpoint: str, params: Dict[str, Any], builder: Any) -> Any:
 
 def dashboard_payload(filters: Dict[str, Any]) -> Dict[str, Any]:
     df = _dm.apply_filters(filters)
+    summary_sheet = _dm.summary_sheet_for(filters, df)
     return {
         "kpis": _dm.kpis(df),
         "trend": _dm.revenue_trend(df),
@@ -2208,7 +2238,7 @@ def dashboard_payload(filters: Dict[str, Any]) -> Dict[str, Any]:
         },
         "operations": _dm.operations_summary(df),
         "insights": _dm.dynamic_insights(df),
-        "summary_sheet": _dm.summary_sheet(),
+        "summary_sheet": summary_sheet,
     }
 
 
