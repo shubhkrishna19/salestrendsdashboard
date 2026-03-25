@@ -814,11 +814,14 @@ button,input,select{font:inherit}
 <script>
 const state = {
   dashboard: null,
+  health: null,
   filtersMeta: null,
   activeTab: "overview",
   charts: {},
   productTimer: null,
 };
+
+const DASHBOARD_CACHE_KEY = "bluewud-salestrends-cache-v1";
 
 const MONEY_COLOR = "#0d5c63";
 const RETURN_COLOR = "#b35c2d";
@@ -905,6 +908,69 @@ function queryFromFilters(filters) {
   return params.toString();
 }
 
+function cachePayload() {
+  return {
+    health: state.health,
+    filtersMeta: state.filtersMeta,
+    dashboard: state.dashboard,
+    activeTab: state.activeTab,
+    filters: currentFilters(),
+    sourceUrlDraft: document.getElementById("sourceUrlInput").value || "",
+    cachedAt: new Date().toISOString(),
+  };
+}
+
+function persistCache() {
+  try {
+    localStorage.setItem(DASHBOARD_CACHE_KEY, JSON.stringify(cachePayload()));
+  } catch (error) {
+    console.warn("cache persist failed", error);
+  }
+}
+
+function readCache() {
+  try {
+    const raw = localStorage.getItem(DASHBOARD_CACHE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (error) {
+    console.warn("cache read failed", error);
+    return null;
+  }
+}
+
+function applyCachedFilters(filters, meta) {
+  document.getElementById("filterPlatform").value = filters.platform || "";
+  document.getElementById("filterCategory").value = filters.category || "";
+  document.getElementById("filterProduct").value = filters.product_query || "";
+  if (filters.start_date) {
+    document.getElementById("filterStart").value = filters.start_date;
+  } else if (meta && meta.date_range) {
+    document.getElementById("filterStart").value = meta.date_range.min;
+  }
+  if (filters.end_date) {
+    document.getElementById("filterEnd").value = filters.end_date;
+  } else if (meta && meta.date_range) {
+    document.getElementById("filterEnd").value = meta.date_range.max;
+  }
+}
+
+function restoreCachedView() {
+  const cached = readCache();
+  if (!cached || !cached.health || !cached.filtersMeta || !cached.dashboard) return false;
+  state.health = cached.health;
+  state.filtersMeta = cached.filtersMeta;
+  state.dashboard = cached.dashboard;
+  renderHealth(cached.health);
+  populateFilters(cached.filtersMeta);
+  applyCachedFilters(cached.filters || {}, cached.filtersMeta);
+  renderQuerySummary(cached.filters || {});
+  renderDashboard(cached.dashboard);
+  document.getElementById("sourceUrlInput").value = cached.sourceUrlDraft || "";
+  switchTab(cached.activeTab || "overview");
+  hideLoader();
+  return true;
+}
+
 function destroyChart(id) {
   if (state.charts[id]) {
     state.charts[id].destroy();
@@ -940,9 +1006,11 @@ function populateFilters(meta) {
     document.getElementById("filterStart").value = meta.date_range.min;
     document.getElementById("filterEnd").value = meta.date_range.max;
   }
+  persistCache();
 }
 
 function renderHealth(health) {
+  state.health = health;
   document.getElementById("metaSource").textContent = `${health.source_type}: ${health.source}`;
   document.getElementById("metaLoaded").textContent = health.data_loaded
     ? `${number(health.rows)} rows loaded with ${number(health.unique_orders)} unique orders`
@@ -952,6 +1020,7 @@ function renderHealth(health) {
   document.getElementById("statusRows").textContent = `Rows: ${number(health.rows)}`;
   document.getElementById("statusOrders").textContent = `Unique orders: ${number(health.unique_orders)}`;
   document.getElementById("statusLoadedAt").textContent = health.loaded_at ? `Loaded: ${health.loaded_at}` : "Loaded: --";
+  persistCache();
 }
 
 function renderQuerySummary(filters) {
@@ -1351,37 +1420,51 @@ function renderDashboard(data) {
   renderReturns(data);
   renderOperations(data);
   renderFyLens(data);
+  persistCache();
 }
 
 function switchTab(tab) {
   state.activeTab = tab;
   document.querySelectorAll(".tab").forEach((node) => node.classList.toggle("active", node.dataset.tab === tab));
   document.querySelectorAll(".panel").forEach((node) => node.classList.toggle("active", node.id === `panel-${tab}`));
+  persistCache();
 }
 
 async function loadHealth() {
   const health = await fetchJson("/api/health");
   renderHealth(health);
+  return health;
 }
 
 async function loadFilters() {
   const meta = await fetchJson("/api/filters");
   populateFilters(meta);
+  return meta;
 }
 
-async function loadDashboard() {
-  showLoader("Calculating dashboard...");
+async function loadDashboard(options = {}) {
+  const showBusy = options.showLoader !== false;
+  const showRefreshNotice = options.showNotice !== false;
+  if (showBusy) {
+    showLoader("Calculating dashboard...");
+  }
   try {
     const filters = currentFilters();
     renderQuerySummary(filters);
     const query = queryFromFilters(filters);
     const data = await fetchJson("/api/dashboard" + (query ? `?${query}` : ""));
     renderDashboard(data);
-    showNotice("info", "Dashboard refreshed.");
+    if (showRefreshNotice) {
+      showNotice("info", "Dashboard refreshed.");
+    }
+    return data;
   } catch (error) {
     showNotice("error", "Failed to load dashboard: " + error.message);
+    throw error;
   } finally {
-    hideLoader();
+    if (showBusy) {
+      hideLoader();
+    }
   }
 }
 
@@ -1504,10 +1587,22 @@ function exportCsv() {
 async function boot() {
   showLoader("Preparing Sales Trends Dashboard...");
   try {
-    await loadHealth();
-    await loadFilters();
     document.getElementById("filterProduct").addEventListener("input", queueProductSuggestions);
-    await loadDashboard();
+    const restored = restoreCachedView();
+    const latestHealth = await loadHealth();
+    const cacheMatchesServer = restored
+      && state.dashboard
+      && state.health
+      && latestHealth
+      && state.health.loaded_at === latestHealth.loaded_at
+      && state.health.source === latestHealth.source
+      && state.health.source_type === latestHealth.source_type;
+    await loadFilters();
+    if (restored && cacheMatchesServer) {
+      hideLoader();
+      return;
+    }
+    await loadDashboard({ showLoader: !restored, showNotice: !restored });
   } catch (error) {
     showNotice("error", "Boot failed: " + error.message);
   } finally {
