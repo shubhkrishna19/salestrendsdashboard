@@ -1129,9 +1129,21 @@ class DataManager:
             raise ValueError(self._load_error or "Workbook reload failed.")
         return self.health()
 
+    def load_order_hub_source(self) -> Dict[str, Any]:
+        if not ORDER_HUB_BASE_URL:
+            raise ValueError("OrderHub SSOT source is not configured for this deployment.")
+        if not self._load(preferred_source_type="order_hub", prefer_snapshot=False):
+            raise ValueError(self._load_error or "OrderHub SSOT reload failed.")
+        return self.health()
+
     def refresh_current_source(self) -> Dict[str, Any]:
         if not self._load(prefer_snapshot=False):
             raise ValueError(self._load_error or "Current source refresh failed.")
+        return self.health()
+
+    def reset_to_default_source(self) -> Dict[str, Any]:
+        if not self._load(prefer_snapshot=False, allow_current_url_fallback=False):
+            raise ValueError(self._load_error or "Default source reload failed.")
         return self.health()
 
     def _current_state(self) -> Dict[str, Any]:
@@ -1152,7 +1164,13 @@ class DataManager:
         self._summary_sheet = state["summary_sheet"]
         self._data_version = state["data_version"]
 
-    def _load(self, preferred_url: Optional[str] = None, prefer_snapshot: bool = True) -> bool:
+    def _load(
+        self,
+        preferred_url: Optional[str] = None,
+        prefer_snapshot: bool = True,
+        preferred_source_type: Optional[str] = None,
+        allow_current_url_fallback: bool = True,
+    ) -> bool:
         self._load_error = None
         previous_state = self._current_state()
 
@@ -1163,13 +1181,19 @@ class DataManager:
         loaders: List[Tuple[str, str, Any]] = []
         if preferred_url:
             loaders.append(("url", preferred_url, self._load_remote_excel))
+        elif preferred_source_type == "order_hub":
+            if ORDER_HUB_BASE_URL:
+                loaders.append(("order_hub", ORDER_HUB_BASE_URL, self._load_order_hub_snapshot))
+            else:
+                self._load_error = "OrderHub SSOT source is not configured for this deployment."
+                return False
         else:
             if ORDER_HUB_BASE_URL:
                 loaders.append(("order_hub", ORDER_HUB_BASE_URL, self._load_order_hub_snapshot))
 
             if DATA_URL:
                 loaders.append(("url", DATA_URL, self._load_remote_excel))
-            elif self._source_type == "url" and str(self._source).startswith(("http://", "https://")):
+            elif allow_current_url_fallback and self._source_type == "url" and str(self._source).startswith(("http://", "https://")):
                 loaders.append(("url", self._source, self._load_remote_excel))
 
             if GITHUB_TOKEN and GITHUB_REPO:
@@ -2209,9 +2233,17 @@ async def get_filters() -> Dict[str, Any]:
 
 
 @app.get("/api/reload")
-async def reload_data(url: Optional[str] = None) -> Dict[str, Any]:
+async def reload_data(url: Optional[str] = None, mode: Optional[str] = None) -> Dict[str, Any]:
     try:
-        result = _dm.load_from_url(url) if url else _dm.refresh_current_source()
+        normalized_mode = (mode or "").strip().lower()
+        if url:
+            result = _dm.load_from_url(url)
+        elif normalized_mode == "order_hub":
+            result = _dm.load_order_hub_source()
+        elif normalized_mode == "default":
+            result = _dm.reset_to_default_source()
+        else:
+            result = _dm.refresh_current_source()
     except ValueError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     _cache.clear()

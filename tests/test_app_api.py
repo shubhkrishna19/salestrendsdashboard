@@ -598,6 +598,75 @@ def test_refresh_current_source_bypasses_snapshot(monkeypatch: pytest.MonkeyPatc
     assert "write" in calls
 
 
+def test_load_order_hub_source_uses_explicit_order_hub_loader(monkeypatch: pytest.MonkeyPatch) -> None:
+    manager = app_api.DataManager.__new__(app_api.DataManager)
+    manager._df = sample_snapshot_frame()
+    manager._loaded_at = pd.Timestamp("2026-03-12").to_pydatetime()
+    manager._source = "https://example.com/data.xlsx"
+    manager._source_type = "url"
+    manager._summary_sheet = {}
+    manager._load_error = None
+    manager._data_version = "seed"
+
+    calls: list[object] = []
+
+    def fake_order_hub(self: app_api.DataManager, base_url: str):
+        calls.append(("order_hub", base_url))
+        return sample_snapshot_frame(), {}
+
+    def fake_write_snapshot(self: app_api.DataManager) -> None:
+        calls.append("write")
+
+    monkeypatch.setattr(app_api.DataManager, "_load_order_hub_snapshot", fake_order_hub)
+    monkeypatch.setattr(app_api.DataManager, "_write_snapshot", fake_write_snapshot)
+    monkeypatch.setattr(app_api, "ORDER_HUB_BASE_URL", "https://orderhub.example.com")
+
+    result = manager.load_order_hub_source()
+
+    assert result["source"] == "https://orderhub.example.com"
+    assert result["source_type"] == "order_hub"
+    assert calls == [("order_hub", "https://orderhub.example.com"), "write"]
+
+
+def test_reset_to_default_source_ignores_previous_url_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    manager = app_api.DataManager.__new__(app_api.DataManager)
+    manager._df = sample_snapshot_frame()
+    manager._loaded_at = pd.Timestamp("2026-03-12").to_pydatetime()
+    manager._source = "https://example.com/custom.xlsx"
+    manager._source_type = "url"
+    manager._summary_sheet = {}
+    manager._load_error = None
+    manager._data_version = "seed"
+
+    calls: list[object] = []
+
+    def fake_local(self: app_api.DataManager, path: str):
+        calls.append(("local", path))
+        return sample_raw_workbook(), {}
+
+    def fake_remote(self: app_api.DataManager, url: str):
+        calls.append(("url", url))
+        raise AssertionError("URL override should not be reused after reset.")
+
+    def fake_write_snapshot(self: app_api.DataManager) -> None:
+        calls.append("write")
+
+    monkeypatch.setattr(app_api.DataManager, "_load_local", fake_local)
+    monkeypatch.setattr(app_api.DataManager, "_load_remote_excel", fake_remote)
+    monkeypatch.setattr(app_api.DataManager, "_write_snapshot", fake_write_snapshot)
+    monkeypatch.setattr(app_api, "ORDER_HUB_BASE_URL", "")
+    monkeypatch.setattr(app_api, "DATA_URL", "")
+    monkeypatch.setattr(app_api, "GITHUB_TOKEN", "")
+    monkeypatch.setattr(app_api, "GITHUB_REPO", "")
+    monkeypatch.setattr(app_api, "DATA_FILE", "data.xlsx")
+
+    result = manager.reset_to_default_source()
+
+    assert result["source"] == "data.xlsx"
+    assert result["source_type"] == "local"
+    assert calls == [("local", "data.xlsx"), "write"]
+
+
 def test_explicit_url_failure_preserves_previous_dataset(monkeypatch: pytest.MonkeyPatch) -> None:
     previous_df = sample_snapshot_frame()
 

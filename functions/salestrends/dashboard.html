@@ -501,7 +501,7 @@ button,input,select{font:inherit}
 <div id="sourceModal" class="modal">
   <div class="modal-card">
     <h2>Update Data Source</h2>
-    <p>Paste the direct Google Drive, SharePoint, or other file URL for the latest workbook. The app will rebuild its in-memory snapshot from this source.</p>
+    <p>Paste the direct Google Drive, SharePoint, or other file URL for the latest workbook. The app will rebuild its in-memory snapshot from this source. Use Reset to Default Sources any time you want to drop the override and go back to the standard source chain.</p>
     <div class="field">
       <label for="sourceUrlInput">Workbook URL</label>
       <input id="sourceUrlInput" class="input" type="text" placeholder="https://drive.google.com/file/d/... or sharepoint link">
@@ -526,14 +526,16 @@ button,input,select{font:inherit}
     </section>
 
     <div class="toolbar">
-      <div class="button-row">
-        <button class="btn btn-primary" onclick="loadDashboard()">Apply Filters</button>
-        <button class="btn btn-secondary" onclick="resetFilters()">Reset</button>
-        <button class="btn btn-secondary" onclick="reloadCurrentSource()">Reload Current Source</button>
-        <button class="btn btn-accent" onclick="openSourceModal()">Change Source URL</button>
-        <button class="btn btn-secondary" onclick="exportCsv()">Export Filtered CSV</button>
-      </div>
+    <div class="button-row">
+      <button class="btn btn-primary" onclick="loadDashboard()">Apply Filters</button>
+      <button class="btn btn-secondary" onclick="resetFilters()">Reset</button>
+      <button class="btn btn-secondary" onclick="loadOrderHubSource()">Load OrderHub SSOT</button>
+      <button class="btn btn-secondary" onclick="reloadCurrentSource()">Reload Current Source</button>
+      <button class="btn btn-accent" onclick="openSourceModal()">Load Source URL</button>
+      <button class="btn btn-secondary" onclick="resetDefaultSource()">Reset to Default Sources</button>
+      <button class="btn btn-secondary" onclick="exportCsv()">Export Filtered CSV</button>
     </div>
+  </div>
 
     <div class="filters">
       <div class="field">
@@ -1449,6 +1451,21 @@ async function applySourceUrl() {
   }
 }
 
+async function loadOrderHubSource() {
+  showLoader("Loading OrderHub SSOT snapshot...");
+  try {
+    await fetchJson("/api/reload?mode=order_hub");
+    await loadHealth();
+    await loadFilters();
+    await loadDashboard();
+    showNotice("info", "OrderHub SSOT loaded successfully.");
+  } catch (error) {
+    showNotice("error", "Could not load OrderHub SSOT: " + error.message);
+  } finally {
+    hideLoader();
+  }
+}
+
 async function reloadCurrentSource() {
   showLoader("Reloading current source...");
   try {
@@ -1459,6 +1476,21 @@ async function reloadCurrentSource() {
     showNotice("info", "Current source reloaded.");
   } catch (error) {
     showNotice("error", "Reload failed: " + error.message);
+  } finally {
+    hideLoader();
+  }
+}
+
+async function resetDefaultSource() {
+  showLoader("Restoring the default data source chain...");
+  try {
+    await fetchJson("/api/reload?mode=default");
+    await loadHealth();
+    await loadFilters();
+    await loadDashboard();
+    showNotice("info", "Default data sources restored.");
+  } catch (error) {
+    showNotice("error", "Could not restore default sources: " + error.message);
   } finally {
     hideLoader();
   }
