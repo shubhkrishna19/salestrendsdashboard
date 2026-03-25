@@ -138,6 +138,32 @@ def sample_sku_search_snapshot_frame() -> pd.DataFrame:
     return frame[app_api.SNAPSHOT_COLUMNS]
 
 
+def sample_orderhub_snapshot_csv() -> bytes:
+    return sample_snapshot_frame().assign(order_date=lambda frame: frame["order_date"].dt.strftime("%Y-%m-%d")).to_csv(index=False).encode("utf-8")
+
+
+def sample_orderhub_bridge_csv() -> bytes:
+    return pd.DataFrame(
+        [
+            {
+                "order_date": "2025-01-01",
+                "platform_raw": "Amazon Online Sale",
+                "category": "Beds",
+                "product": "Alpha Bed",
+                "sku": "ALPHA-1",
+                "sale_qty": 2,
+                "return_qty_signed": -1,
+                "gross_sales": 1000,
+                "return_value_signed": -200,
+                "tax": 180,
+                "order_id": "ORD-1",
+                "return_reason": "Damaged",
+                "return_validity": "Valid",
+            }
+        ]
+    ).to_csv(index=False).encode("utf-8")
+
+
 def build_manager(frame: pd.DataFrame, summary_sheet: dict | None = None) -> app_api.DataManager:
     manager = app_api.DataManager.__new__(app_api.DataManager)
     manager._df = frame.copy()
@@ -364,6 +390,171 @@ def test_local_workbook_summary_sheet_parses_expected_shape() -> None:
     ]
     assert len(payload["headline_cards"]) == 12
     assert len(payload["budget_vs_achievement"]) == 13
+
+
+def test_order_hub_snapshot_loader_reads_csv(monkeypatch: pytest.MonkeyPatch) -> None:
+    manager = build_manager(sample_snapshot_frame(), summary_sheet={})
+
+    class FakeResponse:
+        headers = {"content-type": "text/csv"}
+        content = sample_orderhub_snapshot_csv()
+
+        def raise_for_status(self) -> None:
+            return None
+
+    monkeypatch.setattr(app_api.http_requests, "get", lambda *args, **kwargs: FakeResponse())
+
+    df, summary = manager._load_order_hub_snapshot("https://orderhub.example.com")
+
+    assert summary == {}
+    assert len(df) == 1
+    assert list(df.columns) == app_api.SNAPSHOT_COLUMNS
+    assert df.iloc[0]["platform_raw"] == "Amazon Online Sale"
+    assert df.iloc[0]["order_date"].strftime("%Y-%m-%d") == "2025-01-01"
+
+
+def test_order_hub_snapshot_loader_expands_minimal_contract(monkeypatch: pytest.MonkeyPatch) -> None:
+    manager = build_manager(sample_snapshot_frame(), summary_sheet={})
+
+    class FakeResponse:
+        headers = {"content-type": "text/csv"}
+        content = sample_orderhub_bridge_csv()
+
+        def raise_for_status(self) -> None:
+            return None
+
+    monkeypatch.setattr(app_api.http_requests, "get", lambda *args, **kwargs: FakeResponse())
+
+    df, _ = manager._load_order_hub_snapshot("https://orderhub.example.com")
+
+    row = df.iloc[0]
+    assert row["platform_label"] == "Amazon"
+    assert row["return_qty"] == pytest.approx(1.0)
+    assert row["return_value"] == pytest.approx(200.0)
+    assert row["net_qty"] == pytest.approx(1.0)
+    assert row["net_revenue"] == pytest.approx(800.0)
+    assert row["fy"] == "FY2024-25"
+    assert row["month"] == "2025-01"
+    assert row["weekday"] == "Wednesday"
+
+
+def test_order_hub_snapshot_loader_rejects_missing_required_columns(monkeypatch: pytest.MonkeyPatch) -> None:
+    manager = build_manager(sample_snapshot_frame(), summary_sheet={})
+
+    broken_csv = pd.DataFrame(
+        [
+            {
+                "order_date": "2025-01-01",
+                "platform_raw": "Amazon Online Sale",
+                "category": "Beds",
+                "product": "Alpha Bed",
+                "sku": "ALPHA-1",
+                "sale_qty": 2,
+                "return_qty_signed": -1,
+                "gross_sales": 1000,
+                "return_value_signed": -200,
+                "tax": 180,
+                "order_id": "ORD-1",
+                "return_reason": "Damaged",
+            }
+        ]
+    ).to_csv(index=False).encode("utf-8")
+
+    class FakeResponse:
+        headers = {"content-type": "text/csv"}
+        content = broken_csv
+
+        def raise_for_status(self) -> None:
+            return None
+
+    monkeypatch.setattr(app_api.http_requests, "get", lambda *args, **kwargs: FakeResponse())
+
+    with pytest.raises(ValueError, match="missing required columns: return_validity"):
+        manager._load_order_hub_snapshot("https://orderhub.example.com")
+
+
+def test_refresh_uses_order_hub_before_local_sources(monkeypatch: pytest.MonkeyPatch) -> None:
+    manager = app_api.DataManager.__new__(app_api.DataManager)
+    manager._df = sample_snapshot_frame()
+    manager._loaded_at = pd.Timestamp("2026-03-12").to_pydatetime()
+    manager._source = "seed"
+    manager._source_type = "local"
+    manager._summary_sheet = {}
+    manager._load_error = None
+    manager._data_version = "seed"
+
+    calls: list[object] = []
+
+    def fake_snapshot(self: app_api.DataManager) -> bool:
+        calls.append("snapshot")
+        return False
+
+    def fake_order_hub(self: app_api.DataManager, base_url: str):
+        calls.append(("order_hub", base_url))
+        return sample_snapshot_frame(), {}
+
+    def fake_local(self: app_api.DataManager, _: str):
+        calls.append("local")
+        raise AssertionError("Local fallback should not run after a successful OrderHub load.")
+
+    def fake_write_snapshot(self: app_api.DataManager) -> None:
+        calls.append("write")
+
+    monkeypatch.setattr(app_api.DataManager, "_load_snapshot", fake_snapshot)
+    monkeypatch.setattr(app_api.DataManager, "_load_order_hub_snapshot", fake_order_hub)
+    monkeypatch.setattr(app_api.DataManager, "_load_local", fake_local)
+    monkeypatch.setattr(app_api, "ORDER_HUB_BASE_URL", "https://orderhub.example.com")
+    monkeypatch.setattr(app_api, "DATA_URL", "")
+    monkeypatch.setattr(app_api, "GITHUB_TOKEN", "")
+    monkeypatch.setattr(app_api, "GITHUB_REPO", "")
+    monkeypatch.setattr(app_api.DataManager, "_write_snapshot", fake_write_snapshot)
+
+    result = manager.refresh_current_source()
+
+    assert result["source"] == "https://orderhub.example.com"
+    assert "snapshot" not in calls
+    assert ("order_hub", "https://orderhub.example.com") in calls
+    assert "local" not in calls
+    assert "write" in calls
+
+
+def test_invalid_order_hub_contract_falls_back_to_local_source(monkeypatch: pytest.MonkeyPatch) -> None:
+    manager = app_api.DataManager.__new__(app_api.DataManager)
+    manager._df = sample_snapshot_frame()
+    manager._loaded_at = pd.Timestamp("2026-03-12").to_pydatetime()
+    manager._source = "seed"
+    manager._source_type = "local"
+    manager._summary_sheet = {}
+    manager._load_error = None
+    manager._data_version = "seed"
+
+    calls: list[object] = []
+
+    def fake_order_hub(self: app_api.DataManager, base_url: str):
+        calls.append(("order_hub", base_url))
+        raise ValueError("OrderHub analytics snapshot is missing required columns: return_validity")
+
+    def fake_local(self: app_api.DataManager, _: str):
+        calls.append("local")
+        return sample_raw_workbook(), {}
+
+    def fake_write_snapshot(self: app_api.DataManager) -> None:
+        calls.append("write")
+
+    monkeypatch.setattr(app_api.DataManager, "_load_order_hub_snapshot", fake_order_hub)
+    monkeypatch.setattr(app_api.DataManager, "_load_local", fake_local)
+    monkeypatch.setattr(app_api, "ORDER_HUB_BASE_URL", "https://orderhub.example.com")
+    monkeypatch.setattr(app_api, "DATA_URL", "")
+    monkeypatch.setattr(app_api, "GITHUB_TOKEN", "")
+    monkeypatch.setattr(app_api, "GITHUB_REPO", "")
+    monkeypatch.setattr(app_api.DataManager, "_write_snapshot", fake_write_snapshot)
+
+    result = manager.refresh_current_source()
+
+    assert calls == [("order_hub", "https://orderhub.example.com"), "local", "write"]
+    assert result["source"] == "data.xlsx"
+    assert result["source_type"] == "local"
+    assert result["rows"] == 1
 
 
 def test_refresh_current_source_bypasses_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
