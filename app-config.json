@@ -1,11 +1,11 @@
 {
-  "command": "python appsail_main.py",
+  "command": "python3 -u appsail_main.py",
   "build_path": "dist/appsail",
   "stack": "python_3_9",
   "env_variables": {},
-  "memory": 512,
+  "memory": 1024,
   "scripts": {
-    "preserve": "python scripts/package_appsail.py",
-    "predeploy": "python scripts/package_appsail.py"
+    "preserve": ".venv\\Scripts\\python.exe scripts/package_appsail.py",
+    "predeploy": ".venv\\Scripts\\python.exe scripts/package_appsail.py"
   }
 }

@@ -16,7 +16,7 @@ import re
 import tempfile
 import time
 import warnings
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -43,6 +43,7 @@ GITHUB_REPO = os.environ.get("GITHUB_REPO", "")
 DATA_FILE = os.environ.get("DATA_FILE", "data.xlsx")
 SHEET_NAME = os.environ.get("SHEET_NAME", "Final Sale Data")
 DATA_URL = os.environ.get("DATA_URL", "")
+ORDER_HUB_BASE_URL = os.environ.get("ORDER_HUB_BASE_URL", "").strip()
 SUMMARY_SHEET_NAME = os.environ.get("SUMMARY_SHEET_NAME", "Sales Analytics Dashboard")
 SNAPSHOT_FILE = os.environ.get("SNAPSHOT_FILE", str(BASE_DIR / "data_snapshot.csv.gz"))
 SNAPSHOT_META_FILE = os.environ.get("SNAPSHOT_META_FILE", str(BASE_DIR / "snapshot_meta.json"))
@@ -93,6 +94,23 @@ SNAPSHOT_COLUMNS = [
     "fy",
     "month",
     "weekday",
+]
+
+ORDER_HUB_ANALYTICS_PATH = "/api/analytics/salestrends-snapshot.csv"
+ORDER_HUB_REQUIRED_COLUMNS = [
+    "order_date",
+    "platform_raw",
+    "category",
+    "product",
+    "sku",
+    "sale_qty",
+    "return_qty_signed",
+    "gross_sales",
+    "return_value_signed",
+    "tax",
+    "order_id",
+    "return_reason",
+    "return_validity",
 ]
 
 SEARCH_DIMENSION_COLUMNS = [
@@ -1146,6 +1164,9 @@ class DataManager:
         if preferred_url:
             loaders.append(("url", preferred_url, self._load_remote_excel))
         else:
+            if ORDER_HUB_BASE_URL:
+                loaders.append(("order_hub", ORDER_HUB_BASE_URL, self._load_order_hub_snapshot))
+
             if DATA_URL:
                 loaders.append(("url", DATA_URL, self._load_remote_excel))
             elif self._source_type == "url" and str(self._source).startswith(("http://", "https://")):
@@ -1195,7 +1216,7 @@ class DataManager:
         self._source = source
         self._source_type = source_type
         self._summary_sheet = summary_sheet or {}
-        self._loaded_at = datetime.now(UTC)
+        self._loaded_at = datetime.now(timezone.utc)
         self._data_version = self._loaded_at.strftime("%Y%m%d%H%M%S")
         self._load_error = None
         log.info("Loaded %s normalized rows from %s.", len(self._df), source)
@@ -1330,6 +1351,65 @@ class DataManager:
 
         content = response.content
         return self._read_excel_bytes(content), self._read_summary_bytes(content)
+
+    def _load_order_hub_snapshot(self, base_url: str) -> Tuple[pd.DataFrame, Dict[str, Any]]:
+        url = f"{base_url.rstrip('/')}{ORDER_HUB_ANALYTICS_PATH}"
+        headers = {"User-Agent": "Bluewud-SalesTrends/1.0"}
+        response = http_requests.get(url, headers=headers, timeout=180, allow_redirects=True)
+        response.raise_for_status()
+
+        content_type = response.headers.get("content-type", "").lower()
+        if "text/html" in content_type:
+            raise ValueError("OrderHub snapshot endpoint returned HTML instead of CSV.")
+
+        df = pd.read_csv(io.BytesIO(response.content), parse_dates=["order_date"], keep_default_na=False)
+        return self._normalize_order_hub_snapshot(df), {}
+
+    def _normalize_order_hub_snapshot(self, df: pd.DataFrame) -> pd.DataFrame:
+        frame = df.copy()
+        frame.columns = [str(column).strip() for column in frame.columns]
+
+        if frame.empty:
+            raise ValueError("OrderHub analytics snapshot is empty.")
+
+        missing = [column for column in ORDER_HUB_REQUIRED_COLUMNS if column not in frame.columns]
+        if missing:
+            raise ValueError(
+                "OrderHub analytics snapshot is missing required columns: " + ", ".join(sorted(missing))
+            )
+
+        normalized = pd.DataFrame()
+        normalized["order_date"] = pd.to_datetime(frame["order_date"], errors="coerce")
+        normalized["platform_raw"] = frame["platform_raw"].apply(lambda value: clean_text(value, "Unknown Platform"))
+        normalized["platform_label"] = normalized["platform_raw"].map(
+            lambda value: PLATFORM_DISPLAY_NAMES.get(value, value)
+        )
+        normalized["category"] = frame["category"].apply(lambda value: clean_text(value, "Unknown Category"))
+        normalized["product"] = frame["product"].apply(lambda value: clean_text(value, "Unknown Product"))
+        normalized["sku"] = frame["sku"].apply(lambda value: clean_text(value, "Unknown SKU"))
+        normalized["sale_qty"] = pd.to_numeric(frame["sale_qty"], errors="coerce").fillna(0.0)
+        normalized["return_qty_signed"] = pd.to_numeric(frame["return_qty_signed"], errors="coerce").fillna(0.0)
+        normalized["gross_sales"] = pd.to_numeric(frame["gross_sales"], errors="coerce").fillna(0.0)
+        normalized["return_value_signed"] = pd.to_numeric(frame["return_value_signed"], errors="coerce").fillna(0.0)
+        normalized["tax"] = pd.to_numeric(frame["tax"], errors="coerce").fillna(0.0)
+
+        if (normalized["return_qty_signed"] > 0).any() or (normalized["return_value_signed"] > 0).any():
+            raise ValueError(
+                "OrderHub analytics snapshot must provide signed return_qty_signed and "
+                "return_value_signed values (zero or negative)."
+            )
+
+        normalized["return_qty"] = normalized["return_qty_signed"].abs()
+        normalized["return_value"] = normalized["return_value_signed"].abs()
+        normalized["net_qty"] = normalized["sale_qty"] + normalized["return_qty_signed"]
+        normalized["net_revenue"] = normalized["gross_sales"] + normalized["return_value_signed"]
+        normalized["order_id"] = frame["order_id"].apply(normalize_order_id)
+        normalized["return_reason"] = frame["return_reason"].apply(lambda value: clean_text(value, "Unspecified"))
+        normalized["return_validity"] = frame["return_validity"].apply(lambda value: clean_text(value, "Unknown"))
+        normalized["fy"] = normalized["order_date"].apply(fiscal_year_for)
+        normalized["month"] = normalized["order_date"].dt.to_period("M").astype(str)
+        normalized["weekday"] = normalized["order_date"].dt.day_name().fillna("Unknown")
+        return normalized[SNAPSHOT_COLUMNS]
 
     def _load_github(self, _: str) -> Tuple[pd.DataFrame, Dict[str, Any]]:
         url = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/{DATA_FILE}"
