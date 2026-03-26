@@ -146,6 +146,7 @@ PLATFORM_DISPLAY_NAMES = {
     "Shopify Online Sale": "Shopify",
     "Other Offline Parties": "Offline",
     "Indiamart": "Indiamart",
+    "Misc": "Misc",
 }
 
 PLATFORM_COLORS = {
@@ -157,7 +158,25 @@ PLATFORM_COLORS = {
     "Shopify Online Sale": "#16A34A",
     "Other Offline Parties": "#64748B",
     "Indiamart": "#DC2626",
+    "Misc": "#64748B",
 }
+
+INVALID_PLATFORM_VALUES = {
+    "",
+    "na",
+    "n/a",
+    "nan",
+    "none",
+    "null",
+    "unknown",
+    "unknown platform",
+    "order id",
+    "order_id",
+    "orderid",
+    "main parties",
+}
+
+ORDER_ID_LIKE_PLATFORM_PATTERN = re.compile(r"^(?:ord|order)[-_ ]?[a-z0-9-_/]+$", re.IGNORECASE)
 
 NON_MERCH_PRODUCT_PATTERN = re.compile(
     r"\b(?:scrap|waste|minifix|polythene|carton|housing|discount)\b|damage\s*&\s*scrap",
@@ -244,6 +263,29 @@ def clean_text(value: Any, fallback: str = "Unknown") -> str:
 def normalize_order_id(value: Any) -> Any:
     order_id = clean_text(value, "")
     return order_id if order_id else np.nan
+
+
+def canonical_platform_raw(value: Any) -> str:
+    platform = clean_text(value, "Unknown Platform")
+    if platform in PLATFORM_DISPLAY_NAMES and platform != "Misc":
+        return platform
+
+    normalized = normalize_search_text(platform)
+    digit_count = sum(character.isdigit() for character in platform)
+    has_whitespace = any(character.isspace() for character in platform)
+
+    if normalized in INVALID_PLATFORM_VALUES:
+        return "Misc"
+    if ORDER_ID_LIKE_PLATFORM_PATTERN.fullmatch(platform):
+        return "Misc"
+    if digit_count >= 4 and not has_whitespace:
+        return "Misc"
+    return platform
+
+
+def platform_display_label(value: Any) -> str:
+    platform = canonical_platform_raw(value)
+    return PLATFORM_DISPLAY_NAMES.get(platform, platform)
 
 
 def is_non_merch_product(value: Any) -> bool:
@@ -660,14 +702,15 @@ class DataManager:
             return {}
 
         date_series = self._df["order_date"].dropna()
+        platform_rows = self.platform_data(self._df)
         out = {
             "platforms": [
                 {
-                    "value": platform,
-                    "label": PLATFORM_DISPLAY_NAMES.get(platform, platform),
-                    "color": PLATFORM_COLORS.get(platform, "#64748B"),
+                    "value": row["platform"],
+                    "label": row["platform_label"],
+                    "color": row["color"],
                 }
-                for platform in sorted(self._df["platform_raw"].dropna().unique().tolist())
+                for row in sorted(platform_rows, key=lambda row: (row["platform_label"], row["platform"]))
             ],
             "categories": sorted(self._df["category"].dropna().unique().tolist()),
             "summary_sheet_available": bool(self.summary_sheet()),
@@ -1465,10 +1508,8 @@ class DataManager:
 
         normalized = pd.DataFrame()
         normalized["order_date"] = pd.to_datetime(frame["order_date"], errors="coerce")
-        normalized["platform_raw"] = frame["platform_raw"].apply(lambda value: clean_text(value, "Unknown Platform"))
-        normalized["platform_label"] = normalized["platform_raw"].map(
-            lambda value: PLATFORM_DISPLAY_NAMES.get(value, value)
-        )
+        normalized["platform_raw"] = frame["platform_raw"].apply(canonical_platform_raw)
+        normalized["platform_label"] = normalized["platform_raw"].map(platform_display_label)
         normalized["category"] = frame["category"].apply(lambda value: clean_text(value, "Unknown Category"))
         normalized["product"] = frame["product"].apply(lambda value: clean_text(value, "Unknown Product"))
         normalized["sku"] = frame["sku"].apply(lambda value: clean_text(value, "Unknown SKU"))
@@ -1562,10 +1603,8 @@ class DataManager:
 
         normalized = pd.DataFrame()
         normalized["order_date"] = frame["Final Order date"]
-        normalized["platform_raw"] = frame["Main Parties"].apply(lambda value: clean_text(value, "Unknown Platform"))
-        normalized["platform_label"] = normalized["platform_raw"].map(
-            lambda value: PLATFORM_DISPLAY_NAMES.get(value, value)
-        )
+        normalized["platform_raw"] = frame["Main Parties"].apply(canonical_platform_raw)
+        normalized["platform_label"] = normalized["platform_raw"].map(platform_display_label)
         normalized["category"] = frame["Group Name"].apply(lambda value: clean_text(value, "Unknown Category"))
         normalized["product"] = frame["Item Desc"].apply(lambda value: clean_text(value, "Unknown Product"))
         normalized["sku"] = frame["Alias"].apply(lambda value: clean_text(value, "Unknown SKU"))
@@ -1823,6 +1862,13 @@ class DataManager:
             0.0,
         )
         grouped["share"] = np.where(total_net_revenue > 0, grouped["net_revenue"] / total_net_revenue * 100, 0.0)
+        grouped = grouped[
+            (grouped["orders"] > 0)
+            | (grouped["gross_sales"].abs() > 0)
+            | (grouped["net_revenue"].abs() > 0)
+            | (grouped["sale_qty"].abs() > 0)
+            | (grouped["return_qty"].abs() > 0)
+        ]
         grouped = grouped.sort_values("net_revenue", ascending=False)
 
         return [

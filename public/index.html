@@ -593,28 +593,28 @@ button,input,select{font:inherit}
         <div class="footer-meta-value">Fast runtime path enabled for repeated filtering and future Vercel/AppSail deployment.</div>
       </div>
       <div class="footer-meta-card">
-        <span class="footer-meta-label">Available Data</span>
-        <div id="statusRange" class="footer-meta-value">Available data: --</div>
+        <span class="footer-meta-label">Full Dataset Date Range</span>
+        <div id="statusRange" class="footer-meta-value">--</div>
       </div>
       <div class="footer-meta-card">
-        <span class="footer-meta-label">Selected Slice</span>
-        <div id="statusSelectedRange" class="footer-meta-value">Selected slice: --</div>
+        <span class="footer-meta-label">Current Selection Range</span>
+        <div id="statusSelectedRange" class="footer-meta-value">--</div>
       </div>
       <div class="footer-meta-card">
         <span class="footer-meta-label">Rows</span>
-        <div id="statusRows" class="footer-meta-value">Rows: --</div>
+        <div id="statusRows" class="footer-meta-value">--</div>
       </div>
       <div class="footer-meta-card">
         <span class="footer-meta-label">Unique Orders</span>
-        <div id="statusOrders" class="footer-meta-value">Unique orders: --</div>
+        <div id="statusOrders" class="footer-meta-value">--</div>
       </div>
       <div class="footer-meta-card">
         <span class="footer-meta-label">Trend Mode</span>
-        <div id="statusFrequency" class="footer-meta-value">Trend mode: --</div>
+        <div id="statusFrequency" class="footer-meta-value">--</div>
       </div>
       <div class="footer-meta-card">
         <span class="footer-meta-label">Loaded At</span>
-        <div id="statusLoadedAt" class="footer-meta-value">Loaded: --</div>
+        <div id="statusLoadedAt" class="footer-meta-value">--</div>
       </div>
     </div>
     <div class="modal-actions">
@@ -669,19 +669,17 @@ button,input,select{font:inherit}
 
     <div class="filters-actions">
       <div class="button-row">
-        <button class="btn btn-primary" onclick="loadDashboard()">Apply Filters</button>
-        <button class="btn btn-secondary" onclick="resetFilters()">Reset</button>
+        <button class="btn btn-secondary" onclick="openRuntimeModal()">Data Status</button>
+        <button class="btn btn-secondary" onclick="openSourceModal()">Data Source</button>
         <button class="btn btn-secondary" onclick="exportCsv()">Download Selection CSV</button>
+        <button class="btn btn-secondary" onclick="resetFilters()">Reset</button>
+        <button class="btn btn-primary" onclick="loadDashboard()">Apply Filters</button>
       </div>
     </div>
 
     <div class="utility-row">
       <div class="utility-summary">
         <div class="pill"><span class="dot" id="statusDot"></span><span id="statusText">Checking data health...</span></div>
-      </div>
-      <div class="utility-actions">
-        <button class="btn btn-secondary" onclick="openRuntimeModal()">Data Status</button>
-        <button class="btn btn-secondary" onclick="openSourceModal()">Data Source</button>
       </div>
     </div>
 
@@ -1130,13 +1128,13 @@ function renderHealth(health) {
     : "Data unavailable";
   document.getElementById("statusDot").style.background = health.data_loaded ? GOOD_COLOR : BAD_COLOR;
   document.getElementById("statusText").textContent = health.data_loaded ? "Dataset healthy" : "Dataset unavailable";
-  document.getElementById("statusRows").textContent = `Rows: ${number(health.rows)}`;
-  document.getElementById("statusOrders").textContent = `Unique orders: ${number(health.unique_orders)}`;
+  document.getElementById("statusRows").textContent = number(health.rows);
+  document.getElementById("statusOrders").textContent = number(health.unique_orders);
   const range = state.filtersMeta && state.filtersMeta.date_range
     ? `${state.filtersMeta.date_range.min} to ${state.filtersMeta.date_range.max}`
     : "Unknown";
-  document.getElementById("statusRange").textContent = `Available data: ${range}`;
-  document.getElementById("statusLoadedAt").textContent = health.loaded_at ? `Loaded: ${health.loaded_at}` : "Loaded: --";
+  document.getElementById("statusRange").textContent = range;
+  document.getElementById("statusLoadedAt").textContent = health.loaded_at || "--";
   persistCache();
 }
 
@@ -1148,7 +1146,7 @@ function selectedSliceDisplay(filters, meta) {
 }
 
 function renderSelectedSlice(filters) {
-  document.getElementById("statusSelectedRange").textContent = `Selected slice: ${selectedSliceDisplay(filters, state.filtersMeta)}`;
+  document.getElementById("statusSelectedRange").textContent = selectedSliceDisplay(filters, state.filtersMeta);
 }
 
 function trendModeDisplay(trend) {
@@ -1255,7 +1253,7 @@ function renderOverview(data) {
   renderInsights(data.insights, "insightList", { prominent: true });
   renderSummaryCards(summary.headline_cards || [], summary.meta || {});
   document.getElementById("trendFreq").textContent = trendModeDisplay(data.trend);
-  document.getElementById("statusFrequency").textContent = `Trend mode: ${trendModeDisplay(data.trend)}`;
+  document.getElementById("statusFrequency").textContent = trendModeDisplay(data.trend);
 
   makeChart("chartTrend", {
     type: "line",

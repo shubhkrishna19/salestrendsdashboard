@@ -222,6 +222,35 @@ def sample_return_only_snapshot_frame() -> pd.DataFrame:
     return frame[app_api.SNAPSHOT_COLUMNS]
 
 
+def sample_invalid_platform_snapshot_frame() -> pd.DataFrame:
+    frame = pd.DataFrame(
+        {
+            "order_date": pd.to_datetime(["2025-02-01", "2025-02-02", "2025-02-03"]),
+            "platform_raw": ["Amazon Online Sale", "Misc", "Unknown Platform"],
+            "platform_label": ["Amazon", "Misc", "Unknown Platform"],
+            "category": ["Beds", "Beds", "Beds"],
+            "product": ["Alpha Bed", "Beta Bed", "Ghost Bed"],
+            "sku": ["ALPHA-1", "BETA-1", "GHOST-1"],
+            "sale_qty": [1.0, 2.0, 0.0],
+            "return_qty_signed": [0.0, 0.0, 0.0],
+            "return_qty": [0.0, 0.0, 0.0],
+            "gross_sales": [1000.0, 500.0, 0.0],
+            "return_value_signed": [0.0, 0.0, 0.0],
+            "return_value": [0.0, 0.0, 0.0],
+            "net_qty": [1.0, 2.0, 0.0],
+            "net_revenue": [1000.0, 500.0, 0.0],
+            "tax": [180.0, 90.0, 0.0],
+            "order_id": ["ORD-1", "ORD-2", None],
+            "return_reason": ["None", "None", "None"],
+            "return_validity": ["Valid", "Valid", "Unknown"],
+            "fy": ["FY2024-25", "FY2024-25", "FY2024-25"],
+            "month": ["2025-02", "2025-02", "2025-02"],
+            "weekday": ["Saturday", "Sunday", "Monday"],
+        }
+    )
+    return frame[app_api.SNAPSHOT_COLUMNS]
+
+
 def build_manager(frame: pd.DataFrame, summary_sheet: dict | None = None) -> app_api.DataManager:
     manager = app_api.DataManager.__new__(app_api.DataManager)
     manager._df = frame.copy()
@@ -266,6 +295,7 @@ def test_blank_order_ids_do_not_inflate_grouped_metrics(dm: app_api.DataManager)
     expected_orders = (
         df.groupby("platform_raw", observed=True)
         .agg(orders=("order_id", "nunique"))
+        .query("orders > 0")
         .reset_index()
         .set_index("platform_raw")["orders"]
         .to_dict()
@@ -563,6 +593,22 @@ def test_order_hub_snapshot_loader_expands_minimal_contract(monkeypatch: pytest.
     assert row["fy"] == "FY2024-25"
     assert row["month"] == "2025-01"
     assert row["weekday"] == "Wednesday"
+
+
+def test_canonical_platform_raw_maps_invalid_values_to_misc() -> None:
+    assert app_api.canonical_platform_raw("NA") == "Misc"
+    assert app_api.canonical_platform_raw("Order ID") == "Misc"
+    assert app_api.canonical_platform_raw("ORD-12345") == "Misc"
+    assert app_api.canonical_platform_raw("Amazon Online Sale") == "Amazon Online Sale"
+
+
+def test_filter_options_hide_empty_unknown_platforms() -> None:
+    manager = build_manager(sample_invalid_platform_snapshot_frame(), summary_sheet={})
+
+    platforms = manager.filter_options()["platforms"]
+
+    assert [row["value"] for row in platforms] == ["Amazon Online Sale", "Misc"]
+    assert [row["label"] for row in platforms] == ["Amazon", "Misc"]
 
 
 def test_order_hub_snapshot_loader_rejects_missing_required_columns(monkeypatch: pytest.MonkeyPatch) -> None:
