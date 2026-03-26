@@ -113,6 +113,19 @@ ORDER_HUB_REQUIRED_COLUMNS = [
     "return_validity",
 ]
 
+TREND_MODE_OPTIONS = ("auto", "daily", "weekly", "monthly")
+TREND_MODE_LABELS = {
+    "auto": "Auto",
+    "daily": "Daily",
+    "weekly": "Weekly",
+    "monthly": "Monthly",
+}
+TREND_MODE_PERIODS = {
+    "daily": "D",
+    "weekly": "W",
+    "monthly": "M",
+}
+
 SEARCH_DIMENSION_COLUMNS = [
     "product_search_text",
     "product_search_compact",
@@ -147,7 +160,7 @@ PLATFORM_COLORS = {
 }
 
 NON_MERCH_PRODUCT_PATTERN = re.compile(
-    r"\b(?:scrap|waste|minifix|polythene|carton|housing)\b",
+    r"\b(?:scrap|waste|minifix|polythene|carton|housing|discount)\b|damage\s*&\s*scrap",
     re.IGNORECASE,
 )
 
@@ -443,6 +456,7 @@ def parse_filters(
     end_date: Optional[str] = None,
     product: Optional[str] = None,
     product_query: Optional[str] = None,
+    trend_mode: Optional[str] = None,
 ) -> Dict[str, Any]:
     filters: Dict[str, Any] = {}
     if platform:
@@ -457,6 +471,10 @@ def parse_filters(
         filters["product"] = product.strip()
     if product_query and product_query.strip():
         filters["product_query"] = product_query.strip()
+    if trend_mode:
+        normalized_trend_mode = trend_mode.strip().lower()
+        if normalized_trend_mode in TREND_MODE_OPTIONS:
+            filters["trend_mode"] = normalized_trend_mode
     return filters
 
 
@@ -657,6 +675,11 @@ class DataManager:
                 "source": self._source,
                 "source_type": self._source_type,
             },
+            "trend_modes": [
+                {"value": mode, "label": TREND_MODE_LABELS[mode]}
+                for mode in TREND_MODE_OPTIONS
+            ],
+            "default_trend_mode": "auto",
         }
         if not date_series.empty:
             out["date_range"] = {
@@ -1647,6 +1670,10 @@ class DataManager:
                 "unique_products": 0,
                 "active_platforms": 0,
                 "active_categories": 0,
+                "sales_rows": 0,
+                "return_rows": 0,
+                "return_only_rows": 0,
+                "has_sales_activity": False,
                 "total_revenue": 0.0,
                 "total_revenue_formatted": fmt_inr(0),
                 "total_orders": 0,
@@ -1662,6 +1689,9 @@ class DataManager:
         net_volume = safe_float(df["net_qty"].sum())
         return_qty = safe_float(df["return_qty"].sum())
         return_value = safe_float(df["return_value"].sum())
+        sales_rows = int((df["gross_sales"] > 0).sum())
+        return_rows = int((df["return_value"] > 0).sum())
+        return_only_rows = int(((df["gross_sales"] <= 0) & (df["return_value"] > 0)).sum())
         aov = net_revenue / unique_orders if unique_orders else 0.0
         asp = net_revenue / net_volume if net_volume else 0.0
         return_rate_value = (return_value / gross_sales * 100) if gross_sales else 0.0
@@ -1690,6 +1720,10 @@ class DataManager:
             "unique_products": int(df["product"].nunique()),
             "active_platforms": int(df["platform_raw"].nunique()),
             "active_categories": int(df["category"].nunique()),
+            "sales_rows": sales_rows,
+            "return_rows": return_rows,
+            "return_only_rows": return_only_rows,
+            "has_sales_activity": bool(sales_rows),
             "total_revenue": net_revenue,
             "total_revenue_formatted": fmt_inr(net_revenue),
             "total_orders": unique_orders,
@@ -1698,24 +1732,30 @@ class DataManager:
             "return_rate": round(return_rate_value, 2),
         }
 
-    def revenue_trend(self, df: pd.DataFrame) -> Dict[str, Any]:
+    def revenue_trend(self, df: pd.DataFrame, trend_mode: Optional[str] = None) -> Dict[str, Any]:
+        requested_frequency = clean_text(trend_mode, "auto").lower()
+        if requested_frequency not in TREND_MODE_OPTIONS:
+            requested_frequency = "auto"
+
         if df.empty:
-            return {"frequency": "none", "series": []}
+            return {"frequency": "none", "requested_frequency": requested_frequency, "series": []}
 
         dates = df["order_date"].dropna()
         if dates.empty:
-            return {"frequency": "none", "series": []}
+            return {"frequency": "none", "requested_frequency": requested_frequency, "series": []}
 
-        span_days = int((dates.max() - dates.min()).days)
-        if span_days <= 45:
-            period_column = df["order_date"].dt.to_period("D").astype(str)
-            frequency = "daily"
-        elif span_days <= 180:
-            period_column = df["order_date"].dt.to_period("W").astype(str)
-            frequency = "weekly"
+        if requested_frequency == "auto":
+            span_days = int((dates.max() - dates.min()).days)
+            if span_days <= 45:
+                frequency = "daily"
+            elif span_days <= 180:
+                frequency = "weekly"
+            else:
+                frequency = "monthly"
         else:
-            period_column = df["order_date"].dt.to_period("M").astype(str)
-            frequency = "monthly"
+            frequency = requested_frequency
+
+        period_column = df["order_date"].dt.to_period(TREND_MODE_PERIODS[frequency]).astype(str)
 
         temp = df.assign(period=period_column)
         grouped = (
@@ -1737,6 +1777,7 @@ class DataManager:
 
         return {
             "frequency": frequency,
+            "requested_frequency": requested_frequency,
             "series": [
                 {
                     "date": row["period"],
@@ -1863,8 +1904,7 @@ class DataManager:
             "orders": "orders",
         }.get(metric, "net_revenue")
 
-        if metric == "volume":
-            grouped = grouped[~grouped["product"].apply(is_non_merch_product)]
+        grouped = grouped[~grouped["product"].apply(is_non_merch_product)]
 
         grouped["return_rate_value"] = np.where(
             grouped["gross_sales"] > 0,
@@ -2234,7 +2274,7 @@ def dashboard_payload(filters: Dict[str, Any]) -> Dict[str, Any]:
     summary_sheet = _dm.summary_sheet_for(filters, df)
     return {
         "kpis": _dm.kpis(df),
-        "trend": _dm.revenue_trend(df),
+        "trend": _dm.revenue_trend(df, filters.get("trend_mode")),
         "platforms": _dm.platform_data(df),
         "categories": _dm.category_data(df),
         "top_products": {
@@ -2325,9 +2365,10 @@ async def get_trend(
     end_date: Optional[str] = None,
     product: Optional[str] = None,
     product_query: Optional[str] = None,
+    trend_mode: Optional[str] = Query(None, pattern="^(auto|daily|weekly|monthly)$"),
 ) -> Dict[str, Any]:
-    filters = parse_filters(platform, category, start_date, end_date, product, product_query)
-    return cached_response("trend", filters, lambda: _dm.revenue_trend(_dm.apply_filters(filters)))
+    filters = parse_filters(platform, category, start_date, end_date, product, product_query, trend_mode)
+    return cached_response("trend", filters, lambda: _dm.revenue_trend(_dm.apply_filters(filters), filters.get("trend_mode")))
 
 
 @app.get("/api/platforms")
@@ -2508,8 +2549,9 @@ async def get_dashboard(
     end_date: Optional[str] = None,
     product: Optional[str] = None,
     product_query: Optional[str] = None,
+    trend_mode: Optional[str] = Query(None, pattern="^(auto|daily|weekly|monthly)$"),
 ) -> Dict[str, Any]:
-    filters = parse_filters(platform, category, start_date, end_date, product, product_query)
+    filters = parse_filters(platform, category, start_date, end_date, product, product_query, trend_mode)
     return cached_response("dashboard", filters, lambda: dashboard_payload(filters))
 
 

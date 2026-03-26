@@ -167,27 +167,56 @@ def sample_orderhub_bridge_csv() -> bytes:
 def sample_non_merch_snapshot_frame() -> pd.DataFrame:
     frame = pd.DataFrame(
         {
-            "order_date": pd.to_datetime(["2025-02-01", "2025-02-02", "2025-02-03"]),
-            "platform_raw": ["Amazon Online Sale", "Amazon Online Sale", "Amazon Online Sale"],
-            "platform_label": ["Amazon", "Amazon", "Amazon"],
-            "category": ["Misc", "Hardware", "Tables"],
-            "product": ["Scrap Polythene", "Minifix Housing 12x15", "Bluewud Study Table"],
-            "sku": ["SCRAP-1", "MINI-1", "TABLE-1"],
-            "sale_qty": [10.0, 9.0, 8.0],
-            "return_qty_signed": [0.0, 0.0, 0.0],
-            "return_qty": [0.0, 0.0, 0.0],
-            "gross_sales": [100.0, 200.0, 8000.0],
-            "return_value_signed": [0.0, 0.0, 0.0],
-            "return_value": [0.0, 0.0, 0.0],
-            "net_qty": [10.0, 9.0, 8.0],
-            "net_revenue": [100.0, 200.0, 8000.0],
-            "tax": [0.0, 0.0, 1440.0],
-            "order_id": ["ORD-S1", "ORD-M1", "ORD-T1"],
-            "return_reason": ["None", "None", "None"],
-            "return_validity": ["Valid", "Valid", "Valid"],
-            "fy": ["FY2024-25", "FY2024-25", "FY2024-25"],
-            "month": ["2025-02", "2025-02", "2025-02"],
-            "weekday": ["Saturday", "Sunday", "Monday"],
+            "order_date": pd.to_datetime(["2025-02-01", "2025-02-02", "2025-02-03", "2025-02-04"]),
+            "platform_raw": ["Amazon Online Sale", "Amazon Online Sale", "Amazon Online Sale", "Amazon Online Sale"],
+            "platform_label": ["Amazon", "Amazon", "Amazon", "Amazon"],
+            "category": ["Misc", "Hardware", "Tables", "Adjustments"],
+            "product": ["Scrap Polythene", "Minifix Housing 12x15", "Bluewud Study Table", "Post Sales Discount@18%"],
+            "sku": ["SCRAP-1", "MINI-1", "TABLE-1", "DISC-1"],
+            "sale_qty": [10.0, 9.0, 8.0, 0.0],
+            "return_qty_signed": [0.0, 0.0, 0.0, -1.0],
+            "return_qty": [0.0, 0.0, 0.0, 1.0],
+            "gross_sales": [100.0, 200.0, 8000.0, 0.0],
+            "return_value_signed": [0.0, 0.0, 0.0, -500.0],
+            "return_value": [0.0, 0.0, 0.0, 500.0],
+            "net_qty": [10.0, 9.0, 8.0, -1.0],
+            "net_revenue": [100.0, 200.0, 8000.0, -500.0],
+            "tax": [0.0, 0.0, 1440.0, 0.0],
+            "order_id": ["ORD-S1", "ORD-M1", "ORD-T1", "ORD-D1"],
+            "return_reason": ["None", "None", "None", "Adjustment"],
+            "return_validity": ["Valid", "Valid", "Valid", "Valid"],
+            "fy": ["FY2024-25", "FY2024-25", "FY2024-25", "FY2024-25"],
+            "month": ["2025-02", "2025-02", "2025-02", "2025-02"],
+            "weekday": ["Saturday", "Sunday", "Monday", "Tuesday"],
+        }
+    )
+    return frame[app_api.SNAPSHOT_COLUMNS]
+
+
+def sample_return_only_snapshot_frame() -> pd.DataFrame:
+    frame = pd.DataFrame(
+        {
+            "order_date": pd.to_datetime(["2025-01-11", "2025-01-17"]),
+            "platform_raw": ["Amazon Online Sale", "Amazon Online Sale"],
+            "platform_label": ["Amazon", "Amazon"],
+            "category": ["Shelves", "TV Units"],
+            "product": ["Bluewud Seonn Bookshelf", "Post Sales Discount@18%"],
+            "sku": ["SEONN-1", "DISC-1"],
+            "sale_qty": [0.0, 0.0],
+            "return_qty_signed": [-1.0, -1.0],
+            "return_qty": [1.0, 1.0],
+            "gross_sales": [0.0, 0.0],
+            "return_value_signed": [-3942.0, -206.0],
+            "return_value": [3942.0, 206.0],
+            "net_qty": [-1.0, -1.0],
+            "net_revenue": [-3942.0, -206.0],
+            "tax": [0.0, 0.0],
+            "order_id": ["ORD-R1", "ORD-R2"],
+            "return_reason": ["Returned", "Adjustment"],
+            "return_validity": ["Valid", "Valid"],
+            "fy": ["FY2024-25", "FY2024-25"],
+            "month": ["2025-01", "2025-01"],
+            "weekday": ["Saturday", "Friday"],
         }
     )
     return frame[app_api.SNAPSHOT_COLUMNS]
@@ -255,7 +284,20 @@ def test_top_products_volume_excludes_non_merchandise_names() -> None:
     revenue = manager.top_products(manager.apply_filters({}), metric="revenue", n=10)
 
     assert [item["product"] for item in volume] == ["Bluewud Study Table"]
-    assert [item["product"] for item in revenue][:2] == ["Bluewud Study Table", "Minifix Housing 12x15"]
+    assert [item["product"] for item in revenue] == ["Bluewud Study Table"]
+
+
+def test_return_only_slice_is_flagged_in_kpis() -> None:
+    manager = build_manager(sample_return_only_snapshot_frame())
+
+    kpis = manager.kpis(manager.apply_filters({}))
+
+    assert kpis["gross_sales"] == 0.0
+    assert kpis["return_value"] == pytest.approx(4148.0)
+    assert kpis["sales_rows"] == 0
+    assert kpis["return_rows"] == 2
+    assert kpis["return_only_rows"] == 2
+    assert kpis["has_sales_activity"] is False
 
 
 def test_end_date_filter_is_inclusive(dm: app_api.DataManager) -> None:
@@ -344,12 +386,37 @@ def test_filtered_dashboard_respects_selected_platform(
     assert payload["trend"]["frequency"] == "weekly"
 
 
+def test_dashboard_trend_mode_override_is_honored(client: TestClient) -> None:
+    response = client.get(
+        "/api/dashboard",
+        params={
+            "start_date": "2025-01-01",
+            "end_date": "2025-02-28",
+            "trend_mode": "monthly",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["trend"]["requested_frequency"] == "monthly"
+    assert payload["trend"]["frequency"] == "monthly"
+
+
 def test_summary_sheet_endpoint_returns_dict(client: TestClient) -> None:
     response = client.get("/api/summary-sheet")
 
     assert response.status_code == 200
     payload = response.json()
     assert isinstance(payload, dict)
+
+
+def test_filters_endpoint_exposes_trend_modes(client: TestClient) -> None:
+    response = client.get("/api/filters")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["default_trend_mode"] == "auto"
+    assert [item["value"] for item in payload["trend_modes"]] == ["auto", "daily", "weekly", "monthly"]
 
 
 def test_summary_sheet_fallback_populates_when_workbook_sheet_missing() -> None:

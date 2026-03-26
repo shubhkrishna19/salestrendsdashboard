@@ -559,6 +559,15 @@ button,input,select{font:inherit}
         <label for="filterEnd">To</label>
         <input id="filterEnd" class="input" type="date">
       </div>
+      <div class="field">
+        <label for="filterTrendMode">Trend Mode</label>
+        <select id="filterTrendMode" class="select">
+          <option value="auto">Auto</option>
+          <option value="daily">Daily</option>
+          <option value="weekly">Weekly</option>
+          <option value="monthly">Monthly</option>
+        </select>
+      </div>
     </div>
 
     <div class="status-strip">
@@ -566,6 +575,7 @@ button,input,select{font:inherit}
       <div class="pill" id="statusRows">Rows: --</div>
       <div class="pill" id="statusOrders">Unique orders: --</div>
       <div class="pill" id="statusRange">Available data: --</div>
+      <div class="pill" id="statusSelectedRange">Selected slice: --</div>
       <div class="pill" id="statusFrequency">Trend mode: --</div>
       <div class="pill" id="statusLoadedAt">Loaded: --</div>
     </div>
@@ -582,6 +592,7 @@ button,input,select{font:inherit}
     <div class="content">
       <section id="panel-overview" class="panel active">
         <div id="overviewKpis" class="kpi-grid"></div>
+        <div id="sliceBehaviorNote" class="section-note"></div>
         <div class="grid">
           <div class="card">
             <div class="card-head">
@@ -819,7 +830,7 @@ const state = {
   productTimer: null,
 };
 
-const DASHBOARD_CACHE_KEY = "bluewud-salestrends-cache-v1";
+const DASHBOARD_CACHE_KEY = "bluewud-salestrends-cache-v2";
 
 const MONEY_COLOR = "#0d5c63";
 const RETURN_COLOR = "#b35c2d";
@@ -895,6 +906,7 @@ function currentFilters() {
     start_date: document.getElementById("filterStart").value || "",
     end_date: document.getElementById("filterEnd").value || "",
     product_query: document.getElementById("filterProduct").value.trim() || "",
+    trend_mode: document.getElementById("filterTrendMode").value || "auto",
   };
 }
 
@@ -940,6 +952,7 @@ function applyCachedFilters(filters, meta) {
   document.getElementById("filterPlatform").value = filters.platform || "";
   document.getElementById("filterCategory").value = filters.category || "";
   document.getElementById("filterProduct").value = filters.product_query || "";
+  document.getElementById("filterTrendMode").value = filters.trend_mode || meta?.default_trend_mode || "auto";
   if (filters.start_date) {
     document.getElementById("filterStart").value = filters.start_date;
   } else if (meta && meta.date_range) {
@@ -961,6 +974,7 @@ function restoreCachedView() {
   renderHealth(cached.health);
   populateFilters(cached.filtersMeta);
   applyCachedFilters(cached.filters || {}, cached.filtersMeta);
+  renderSelectedSlice(cached.filters || {});
   renderQuerySummary(cached.filters || {});
   renderDashboard(cached.dashboard);
   document.getElementById("sourceUrlInput").value = cached.sourceUrlDraft || "";
@@ -990,8 +1004,15 @@ function populateFilters(meta) {
   state.filtersMeta = meta;
   const platformEl = document.getElementById("filterPlatform");
   const categoryEl = document.getElementById("filterCategory");
+  const trendModeEl = document.getElementById("filterTrendMode");
   platformEl.innerHTML = '<option value="">All platforms</option>';
   categoryEl.innerHTML = '<option value="">All categories</option>';
+  trendModeEl.innerHTML = (meta.trend_modes || [
+    { value: "auto", label: "Auto" },
+    { value: "daily", label: "Daily" },
+    { value: "weekly", label: "Weekly" },
+    { value: "monthly", label: "Monthly" },
+  ]).map((mode) => `<option value="${mode.value}">${mode.label}</option>`).join("");
 
   (meta.platforms || []).forEach((platform) => {
     platformEl.innerHTML += `<option value="${platform.value}">${platform.label} (${platform.value})</option>`;
@@ -1008,6 +1029,7 @@ function populateFilters(meta) {
     document.getElementById("filterStart").value = meta.date_range.min;
     document.getElementById("filterEnd").value = meta.date_range.max;
   }
+  trendModeEl.value = trendModeEl.value || meta.default_trend_mode || "auto";
   if (state.health) {
     renderHealth(state.health);
   }
@@ -1030,6 +1052,23 @@ function renderHealth(health) {
   document.getElementById("statusRange").textContent = `Available data: ${range}`;
   document.getElementById("statusLoadedAt").textContent = health.loaded_at ? `Loaded: ${health.loaded_at}` : "Loaded: --";
   persistCache();
+}
+
+function selectedSliceDisplay(filters, meta) {
+  const available = meta?.date_range;
+  const start = filters?.start_date || available?.min || "--";
+  const end = filters?.end_date || available?.max || "--";
+  return `${start} to ${end}`;
+}
+
+function renderSelectedSlice(filters) {
+  document.getElementById("statusSelectedRange").textContent = `Selected slice: ${selectedSliceDisplay(filters, state.filtersMeta)}`;
+}
+
+function trendModeDisplay(trend) {
+  const requested = String(trend?.requested_frequency || "auto").toUpperCase();
+  const actual = String(trend?.frequency || "none").toUpperCase();
+  return requested === "AUTO" ? `AUTO (${actual})` : actual;
 }
 
 function renderQuerySummary(filters) {
@@ -1065,6 +1104,27 @@ function renderKpis(kpis) {
       <div class="sub">${sub}</div>
     </div>
   `).join("");
+}
+
+function renderSliceBehaviorNote(kpis) {
+  const note = document.getElementById("sliceBehaviorNote");
+  if (!note) return;
+  if (!kpis) {
+    note.textContent = "";
+    note.classList.remove("show");
+    return;
+  }
+  if (!kpis.has_sales_activity && Number(kpis.return_value || 0) > 0) {
+    const selectedRange = selectedSliceDisplay(currentFilters(), state.filtersMeta);
+    const availableRange = state.filtersMeta?.date_range
+      ? `${state.filtersMeta.date_range.min} to ${state.filtersMeta.date_range.max}`
+      : "Unknown";
+    note.textContent = `Selected slice ${selectedRange} contains return or adjustment entries only. Gross sales stay at zero because no billed sales rows fall inside that period. Available data spans ${availableRange}. Current view: ${number(kpis.return_only_rows || 0)} return-only rows.`;
+    note.classList.add("show");
+    return;
+  }
+  note.textContent = "";
+  note.classList.remove("show");
 }
 
 function renderInsights(items, targetId, options = {}) {
@@ -1105,10 +1165,11 @@ function renderTable(targetId, headers, rows, emptyMessage = "No rows are availa
 function renderOverview(data) {
   const summary = data.summary_sheet || {};
   renderKpis(data.kpis);
+  renderSliceBehaviorNote(data.kpis);
   renderInsights(data.insights, "insightList", { prominent: true });
   renderSummaryCards(summary.headline_cards || [], summary.meta || {});
-  document.getElementById("trendFreq").textContent = (data.trend.frequency || "none").toUpperCase();
-  document.getElementById("statusFrequency").textContent = `Trend mode: ${(data.trend.frequency || "none").toUpperCase()}`;
+  document.getElementById("trendFreq").textContent = trendModeDisplay(data.trend);
+  document.getElementById("statusFrequency").textContent = `Trend mode: ${trendModeDisplay(data.trend)}`;
 
   makeChart("chartTrend", {
     type: "line",
@@ -1462,6 +1523,7 @@ async function loadDashboard(options = {}) {
   }
   try {
     const filters = currentFilters();
+    renderSelectedSlice(filters);
     renderQuerySummary(filters);
     const query = queryFromFilters(filters);
     const data = await fetchJson("/api/dashboard" + (query ? `?${query}` : ""));
@@ -1508,11 +1570,13 @@ function resetFilters() {
   document.getElementById("filterPlatform").value = "";
   document.getElementById("filterCategory").value = "";
   document.getElementById("filterProduct").value = "";
+  document.getElementById("filterTrendMode").value = state.filtersMeta?.default_trend_mode || "auto";
   document.getElementById("productList").innerHTML = "";
   if (state.filtersMeta && state.filtersMeta.date_range) {
     document.getElementById("filterStart").value = state.filtersMeta.date_range.min;
     document.getElementById("filterEnd").value = state.filtersMeta.date_range.max;
   }
+  renderSelectedSlice(currentFilters());
   loadDashboard();
 }
 
