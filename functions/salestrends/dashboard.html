@@ -127,10 +127,25 @@ button,input,select{font:inherit}
   word-break:break-word;
 }
 .toolbar{
-  display:flex;
-  flex-wrap:wrap;
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
   gap:12px;
   padding:20px 24px 10px;
+}
+.action-cluster{
+  display:grid;
+  gap:10px;
+  padding:16px 18px;
+  border:1px solid var(--line);
+  border-radius:20px;
+  background:rgba(255,250,241,.78);
+}
+.action-cluster-label{
+  font-size:11px;
+  text-transform:uppercase;
+  letter-spacing:.08em;
+  color:var(--muted);
+  font-weight:700;
 }
 .filters{
   display:grid;
@@ -179,18 +194,18 @@ button,input,select{font:inherit}
 .status-strip{
   display:flex;
   flex-wrap:wrap;
-  gap:12px;
+  gap:10px;
   padding:0 24px 18px;
 }
 .pill{
   display:inline-flex;
   align-items:center;
   gap:8px;
-  padding:10px 14px;
+  padding:8px 12px;
   border-radius:999px;
   border:1px solid var(--line);
-  background:rgba(255,250,241,.88);
-  font-size:13px;
+  background:rgba(245,236,221,.72);
+  font-size:12px;
 }
 .dot{width:10px;height:10px;border-radius:999px;background:var(--good)}
 .tabs{
@@ -467,6 +482,7 @@ button,input,select{font:inherit}
 .modal-card p{margin:0 0 18px;color:var(--muted);line-height:1.6}
 .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}
 @media (max-width:1180px){
+  .toolbar{grid-template-columns:1fr}
   .filters{grid-template-columns:1fr 1fr 1fr 1fr}
   .grid.two,.grid.equal,.grid.triple,.grid.product-top,.summary-cards,.grid.overview-top{grid-template-columns:1fr 1fr}
   .kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -526,14 +542,22 @@ button,input,select{font:inherit}
     </section>
 
     <div class="toolbar">
-    <div class="button-row">
-      <button class="btn btn-primary" onclick="loadDashboard()">Apply Filters</button>
-      <button class="btn btn-secondary" onclick="resetFilters()">Reset</button>
-      <button class="btn btn-secondary" onclick="loadOrderHubSource()">Load OrderHub SSOT</button>
-      <button class="btn btn-secondary" onclick="reloadCurrentSource()">Reload Current Source</button>
-      <button class="btn btn-accent" onclick="openSourceModal()">Load Source URL</button>
-      <button class="btn btn-secondary" onclick="resetDefaultSource()">Reset to Default Sources</button>
-      <button class="btn btn-secondary" onclick="exportCsv()">Export Filtered CSV</button>
+    <div class="action-cluster">
+      <div class="action-cluster-label">View Controls</div>
+      <div class="button-row">
+        <button class="btn btn-primary" onclick="loadDashboard()">Apply Filters</button>
+        <button class="btn btn-secondary" onclick="resetFilters()">Reset</button>
+        <button class="btn btn-secondary" onclick="exportCsv()">Download Selection CSV</button>
+      </div>
+    </div>
+    <div class="action-cluster">
+      <div class="action-cluster-label">Data Source</div>
+      <div class="button-row">
+        <button class="btn btn-secondary" onclick="loadOrderHubSource()">Load CRM Order History</button>
+        <button class="btn btn-secondary" onclick="reloadCurrentSource()">Refresh Current Source</button>
+        <button class="btn btn-accent" onclick="openSourceModal()">Load Another Source</button>
+        <button class="btn btn-secondary" onclick="resetDefaultSource()">Reset Source Defaults</button>
+      </div>
     </div>
   </div>
 
@@ -570,16 +594,6 @@ button,input,select{font:inherit}
       </div>
     </div>
 
-    <div class="status-strip">
-      <div class="pill"><span class="dot" id="statusDot"></span><span id="statusText">Checking data health...</span></div>
-      <div class="pill" id="statusRows">Rows: --</div>
-      <div class="pill" id="statusOrders">Unique orders: --</div>
-      <div class="pill" id="statusRange">Available data: --</div>
-      <div class="pill" id="statusSelectedRange">Selected slice: --</div>
-      <div class="pill" id="statusFrequency">Trend mode: --</div>
-      <div class="pill" id="statusLoadedAt">Loaded: --</div>
-    </div>
-
     <div class="tabs">
       <button class="tab active" data-tab="overview" onclick="switchTab('overview')">Overview</button>
       <button class="tab" data-tab="channels" onclick="switchTab('channels')">Channels</button>
@@ -587,6 +601,16 @@ button,input,select{font:inherit}
       <button class="tab" data-tab="returns" onclick="switchTab('returns')">Returns</button>
       <button class="tab" data-tab="operations" onclick="switchTab('operations')">Operations</button>
       <button class="tab" data-tab="fy" onclick="switchTab('fy')">FY Lens</button>
+    </div>
+
+    <div class="status-strip">
+      <div class="pill"><span class="dot" id="statusDot"></span><span id="statusText">Checking data health...</span></div>
+      <div class="pill" id="statusRange">Available data: --</div>
+      <div class="pill" id="statusSelectedRange">Selected slice: --</div>
+      <div class="pill" id="statusRows">Rows: --</div>
+      <div class="pill" id="statusOrders">Unique orders: --</div>
+      <div class="pill" id="statusFrequency">Trend mode: --</div>
+      <div class="pill" id="statusLoadedAt">Loaded: --</div>
     </div>
 
     <div class="content">
@@ -1611,15 +1635,15 @@ async function applySourceUrl() {
 }
 
 async function loadOrderHubSource() {
-  showLoader("Loading OrderHub SSOT snapshot...");
+  showLoader("Loading CRM Order History snapshot...");
   try {
     await fetchJson("/api/reload?mode=order_hub");
     await loadHealth();
     await loadFilters();
     await loadDashboard();
-    showNotice("info", "OrderHub SSOT loaded successfully.");
+    showNotice("info", "CRM Order History loaded successfully.");
   } catch (error) {
-    showNotice("error", "Could not load OrderHub SSOT: " + error.message);
+    showNotice("error", "Could not load CRM Order History: " + error.message);
   } finally {
     hideLoader();
   }
