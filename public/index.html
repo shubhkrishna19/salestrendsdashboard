@@ -132,6 +132,7 @@ button,input,select{font:inherit}
   gap:12px;
   padding:20px 24px 10px;
 }
+.toolbar.single{grid-template-columns:1fr}
 .action-cluster{
   display:grid;
   gap:10px;
@@ -191,6 +192,30 @@ button,input,select{font:inherit}
 .btn-primary{background:var(--accent);color:#f3efe7}
 .btn-secondary{background:var(--panel-strong);color:var(--ink);border:1px solid var(--line)}
 .btn-accent{background:var(--accent-2);color:#fff4ed}
+.filters-actions{
+  display:flex;
+  justify-content:flex-end;
+  padding:0 24px 18px;
+}
+.utility-row{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding:0 24px 18px;
+}
+.utility-actions{
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+  justify-content:flex-end;
+}
+.utility-summary{
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+}
 .status-strip{
   display:flex;
   flex-wrap:wrap;
@@ -478,8 +503,15 @@ button,input,select{font:inherit}
   padding:24px;
   box-shadow:var(--shadow);
 }
+.modal-card.compact{width:min(680px,92vw)}
 .modal-card h2{margin:0 0 10px;font-size:24px;letter-spacing:-.03em}
 .modal-card p{margin:0 0 18px;color:var(--muted);line-height:1.6}
+.modal-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:12px;
+}
+.modal-grid .btn{width:100%}
 .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}
 @media (max-width:1180px){
   .toolbar{grid-template-columns:1fr}
@@ -489,16 +521,19 @@ button,input,select{font:inherit}
   .insight-list{grid-template-columns:1fr}
   .footer-grid{grid-template-columns:1fr 1fr}
   .grid.product-top .card:last-child{grid-column:auto}
+  .modal-grid{grid-template-columns:1fr}
 }
 @media (max-width:760px){
   .page{padding:12px}
   .shell{border-radius:24px}
-  .hero,.toolbar,.content,.tabs,.filters,.status-strip{padding-left:16px;padding-right:16px}
+  .hero,.toolbar,.content,.tabs,.filters,.status-strip,.filters-actions,.utility-row{padding-left:16px;padding-right:16px}
   .filters{grid-template-columns:1fr}
   .grid.two,.grid.equal,.grid.triple,.grid.product-top,.summary-cards,.kpi-grid,.grid.overview-top,.insight-list{grid-template-columns:1fr}
   .footer-grid{grid-template-columns:1fr}
   .app-footer{padding:0 16px 20px}
   .hero-copy h1{font-size:34px}
+  .utility-actions{width:100%;justify-content:flex-start}
+  .filters-actions{justify-content:flex-start}
   .grid.product-top .card:last-child{grid-column:auto}
 }
 </style>
@@ -515,16 +550,75 @@ button,input,select{font:inherit}
 <div id="noticeInfo" class="notice info"></div>
 
 <div id="sourceModal" class="modal">
-  <div class="modal-card">
-    <h2>Update Data Source</h2>
-    <p>Paste the direct Google Drive, SharePoint, or other file URL for the latest workbook. The app will rebuild its in-memory snapshot from this source. Use Reset to Default Sources any time you want to drop the override and go back to the standard source chain.</p>
-    <div class="field">
-      <label for="sourceUrlInput">Workbook URL</label>
-      <input id="sourceUrlInput" class="input" type="text" placeholder="https://drive.google.com/file/d/... or sharepoint link">
+  <div class="modal-card compact">
+    <h2>Data Source Controls</h2>
+    <p>Choose the order-history source for this session, or load another workbook only when you need to inspect a different dataset.</p>
+    <div class="modal-grid">
+      <button class="btn btn-secondary" onclick="loadOrderHubSource()">Load CRM Order History</button>
+      <button class="btn btn-secondary" onclick="reloadCurrentSource()">Refresh Current Source</button>
+      <button class="btn btn-secondary" onclick="resetDefaultSource()">Reset Source Defaults</button>
+      <button class="btn btn-accent" onclick="openSourceUrlFlow()">Load Another Source</button>
+    </div>
+    <div id="sourceUrlFlow" style="display:none;margin-top:18px;">
+      <div class="field">
+        <label for="sourceUrlInput">Workbook URL</label>
+        <input id="sourceUrlInput" class="input" type="text" placeholder="https://drive.google.com/file/d/... or sharepoint link">
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="hideSourceUrlFlow()">Back</button>
+        <button class="btn btn-primary" onclick="applySourceUrl()">Load Source</button>
+      </div>
     </div>
     <div class="modal-actions">
-      <button class="btn btn-secondary" onclick="closeSourceModal()">Cancel</button>
-      <button class="btn btn-primary" onclick="applySourceUrl()">Load Source</button>
+      <button class="btn btn-secondary" onclick="closeSourceModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<div id="runtimeModal" class="modal">
+  <div class="modal-card compact">
+    <h2>Data Status</h2>
+    <p>Current source, loaded state, and the exact order range being used for the dashboard right now.</p>
+    <div class="footer-grid">
+      <div class="footer-meta-card">
+        <span class="footer-meta-label">Loaded State</span>
+        <div id="metaLoaded" class="footer-meta-value">Checking health...</div>
+      </div>
+      <div class="footer-meta-card">
+        <span class="footer-meta-label">Data Source</span>
+        <div id="metaSource" class="footer-meta-value">Loading...</div>
+      </div>
+      <div class="footer-meta-card">
+        <span class="footer-meta-label">Snapshot Path</span>
+        <div class="footer-meta-value">Fast runtime path enabled for repeated filtering and future Vercel/AppSail deployment.</div>
+      </div>
+      <div class="footer-meta-card">
+        <span class="footer-meta-label">Available Data</span>
+        <div id="statusRange" class="footer-meta-value">Available data: --</div>
+      </div>
+      <div class="footer-meta-card">
+        <span class="footer-meta-label">Selected Slice</span>
+        <div id="statusSelectedRange" class="footer-meta-value">Selected slice: --</div>
+      </div>
+      <div class="footer-meta-card">
+        <span class="footer-meta-label">Rows</span>
+        <div id="statusRows" class="footer-meta-value">Rows: --</div>
+      </div>
+      <div class="footer-meta-card">
+        <span class="footer-meta-label">Unique Orders</span>
+        <div id="statusOrders" class="footer-meta-value">Unique orders: --</div>
+      </div>
+      <div class="footer-meta-card">
+        <span class="footer-meta-label">Trend Mode</span>
+        <div id="statusFrequency" class="footer-meta-value">Trend mode: --</div>
+      </div>
+      <div class="footer-meta-card">
+        <span class="footer-meta-label">Loaded At</span>
+        <div id="statusLoadedAt" class="footer-meta-value">Loaded: --</div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeRuntimeModal()">Close</button>
     </div>
   </div>
 </div>
@@ -536,30 +630,9 @@ button,input,select{font:inherit}
         <h1>Sales Trends Dashboard</h1>
         <p>
           Internal analytics for revenue, returns, platform mix, budget tracking, and operational patterns.
-          Every metric is driven from the normalized sales workbook, with unique orders as the primary count lens.
         </p>
       </div>
     </section>
-
-    <div class="toolbar">
-    <div class="action-cluster">
-      <div class="action-cluster-label">View Controls</div>
-      <div class="button-row">
-        <button class="btn btn-primary" onclick="loadDashboard()">Apply Filters</button>
-        <button class="btn btn-secondary" onclick="resetFilters()">Reset</button>
-        <button class="btn btn-secondary" onclick="exportCsv()">Download Selection CSV</button>
-      </div>
-    </div>
-    <div class="action-cluster">
-      <div class="action-cluster-label">Data Source</div>
-      <div class="button-row">
-        <button class="btn btn-secondary" onclick="loadOrderHubSource()">Load CRM Order History</button>
-        <button class="btn btn-secondary" onclick="reloadCurrentSource()">Refresh Current Source</button>
-        <button class="btn btn-accent" onclick="openSourceModal()">Load Another Source</button>
-        <button class="btn btn-secondary" onclick="resetDefaultSource()">Reset Source Defaults</button>
-      </div>
-    </div>
-  </div>
 
     <div class="filters">
       <div class="field">
@@ -594,6 +667,24 @@ button,input,select{font:inherit}
       </div>
     </div>
 
+    <div class="filters-actions">
+      <div class="button-row">
+        <button class="btn btn-primary" onclick="loadDashboard()">Apply Filters</button>
+        <button class="btn btn-secondary" onclick="resetFilters()">Reset</button>
+        <button class="btn btn-secondary" onclick="exportCsv()">Download Selection CSV</button>
+      </div>
+    </div>
+
+    <div class="utility-row">
+      <div class="utility-summary">
+        <div class="pill"><span class="dot" id="statusDot"></span><span id="statusText">Checking data health...</span></div>
+      </div>
+      <div class="utility-actions">
+        <button class="btn btn-secondary" onclick="openRuntimeModal()">Data Status</button>
+        <button class="btn btn-secondary" onclick="openSourceModal()">Data Source</button>
+      </div>
+    </div>
+
     <div class="tabs">
       <button class="tab active" data-tab="overview" onclick="switchTab('overview')">Overview</button>
       <button class="tab" data-tab="channels" onclick="switchTab('channels')">Channels</button>
@@ -601,16 +692,6 @@ button,input,select{font:inherit}
       <button class="tab" data-tab="returns" onclick="switchTab('returns')">Returns</button>
       <button class="tab" data-tab="operations" onclick="switchTab('operations')">Operations</button>
       <button class="tab" data-tab="fy" onclick="switchTab('fy')">FY Lens</button>
-    </div>
-
-    <div class="status-strip">
-      <div class="pill"><span class="dot" id="statusDot"></span><span id="statusText">Checking data health...</span></div>
-      <div class="pill" id="statusRange">Available data: --</div>
-      <div class="pill" id="statusSelectedRange">Selected slice: --</div>
-      <div class="pill" id="statusRows">Rows: --</div>
-      <div class="pill" id="statusOrders">Unique orders: --</div>
-      <div class="pill" id="statusFrequency">Trend mode: --</div>
-      <div class="pill" id="statusLoadedAt">Loaded: --</div>
     </div>
 
     <div class="content">
@@ -822,25 +903,6 @@ button,input,select{font:inherit}
         </div>
       </section>
     </div>
-    <footer class="app-footer">
-      <details>
-        <summary class="footer-toggle">Runtime Details</summary>
-        <div class="footer-grid">
-          <div class="footer-meta-card">
-            <span class="footer-meta-label">Data Source</span>
-            <div id="metaSource" class="footer-meta-value">Loading...</div>
-          </div>
-          <div class="footer-meta-card">
-            <span class="footer-meta-label">Loaded State</span>
-            <div id="metaLoaded" class="footer-meta-value">Checking health...</div>
-          </div>
-          <div class="footer-meta-card">
-            <span class="footer-meta-label">Snapshot Path</span>
-            <div class="footer-meta-value">Fast runtime path enabled for repeated filtering and future Vercel/AppSail deployment.</div>
-          </div>
-        </div>
-      </details>
-    </footer>
   </div>
 </div>
 
@@ -1606,11 +1668,30 @@ function resetFilters() {
 
 function openSourceModal() {
   document.getElementById("sourceModal").classList.add("show");
-  document.getElementById("sourceUrlInput").focus();
+  document.getElementById("sourceUrlFlow").style.display = "none";
+  const firstAction = document.querySelector("#sourceModal .modal-grid .btn");
+  if (firstAction) firstAction.focus();
 }
 
 function closeSourceModal() {
   document.getElementById("sourceModal").classList.remove("show");
+}
+
+function openSourceUrlFlow() {
+  document.getElementById("sourceUrlFlow").style.display = "block";
+  document.getElementById("sourceUrlInput").focus();
+}
+
+function hideSourceUrlFlow() {
+  document.getElementById("sourceUrlFlow").style.display = "none";
+}
+
+function openRuntimeModal() {
+  document.getElementById("runtimeModal").classList.add("show");
+}
+
+function closeRuntimeModal() {
+  document.getElementById("runtimeModal").classList.remove("show");
 }
 
 async function applySourceUrl() {
@@ -1635,6 +1716,7 @@ async function applySourceUrl() {
 }
 
 async function loadOrderHubSource() {
+  closeSourceModal();
   showLoader("Loading CRM Order History snapshot...");
   try {
     await fetchJson("/api/reload?mode=order_hub");
@@ -1650,6 +1732,7 @@ async function loadOrderHubSource() {
 }
 
 async function reloadCurrentSource() {
+  closeSourceModal();
   showLoader("Reloading current source...");
   try {
     await fetchJson("/api/reload");
@@ -1665,6 +1748,7 @@ async function reloadCurrentSource() {
 }
 
 async function resetDefaultSource() {
+  closeSourceModal();
   showLoader("Restoring the default data source chain...");
   try {
     await fetchJson("/api/reload?mode=default");
