@@ -146,6 +146,11 @@ PLATFORM_COLORS = {
     "Indiamart": "#DC2626",
 }
 
+NON_MERCH_PRODUCT_PATTERN = re.compile(
+    r"\b(?:scrap|waste|minifix|polythene|carton|housing)\b",
+    re.IGNORECASE,
+)
+
 SUMMARY_SECTION_KEYS = [
     "headline_cards",
     "monthly_fy_sales",
@@ -226,6 +231,10 @@ def clean_text(value: Any, fallback: str = "Unknown") -> str:
 def normalize_order_id(value: Any) -> Any:
     order_id = clean_text(value, "")
     return order_id if order_id else np.nan
+
+
+def is_non_merch_product(value: Any) -> bool:
+    return bool(NON_MERCH_PRODUCT_PATTERN.search(clean_text(value, "")))
 
 
 def safe_divide(numerator: Any, denominator: Any) -> Optional[float]:
@@ -1853,6 +1862,9 @@ class DataManager:
             "volume": "net_qty",
             "orders": "orders",
         }.get(metric, "net_revenue")
+
+        if metric == "volume":
+            grouped = grouped[~grouped["product"].apply(is_non_merch_product)]
 
         grouped["return_rate_value"] = np.where(
             grouped["gross_sales"] > 0,

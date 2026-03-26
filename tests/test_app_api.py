@@ -164,6 +164,35 @@ def sample_orderhub_bridge_csv() -> bytes:
     ).to_csv(index=False).encode("utf-8")
 
 
+def sample_non_merch_snapshot_frame() -> pd.DataFrame:
+    frame = pd.DataFrame(
+        {
+            "order_date": pd.to_datetime(["2025-02-01", "2025-02-02", "2025-02-03"]),
+            "platform_raw": ["Amazon Online Sale", "Amazon Online Sale", "Amazon Online Sale"],
+            "platform_label": ["Amazon", "Amazon", "Amazon"],
+            "category": ["Misc", "Hardware", "Tables"],
+            "product": ["Scrap Polythene", "Minifix Housing 12x15", "Bluewud Study Table"],
+            "sku": ["SCRAP-1", "MINI-1", "TABLE-1"],
+            "sale_qty": [10.0, 9.0, 8.0],
+            "return_qty_signed": [0.0, 0.0, 0.0],
+            "return_qty": [0.0, 0.0, 0.0],
+            "gross_sales": [100.0, 200.0, 8000.0],
+            "return_value_signed": [0.0, 0.0, 0.0],
+            "return_value": [0.0, 0.0, 0.0],
+            "net_qty": [10.0, 9.0, 8.0],
+            "net_revenue": [100.0, 200.0, 8000.0],
+            "tax": [0.0, 0.0, 1440.0],
+            "order_id": ["ORD-S1", "ORD-M1", "ORD-T1"],
+            "return_reason": ["None", "None", "None"],
+            "return_validity": ["Valid", "Valid", "Valid"],
+            "fy": ["FY2024-25", "FY2024-25", "FY2024-25"],
+            "month": ["2025-02", "2025-02", "2025-02"],
+            "weekday": ["Saturday", "Sunday", "Monday"],
+        }
+    )
+    return frame[app_api.SNAPSHOT_COLUMNS]
+
+
 def build_manager(frame: pd.DataFrame, summary_sheet: dict | None = None) -> app_api.DataManager:
     manager = app_api.DataManager.__new__(app_api.DataManager)
     manager._df = frame.copy()
@@ -217,6 +246,16 @@ def test_blank_order_ids_do_not_inflate_grouped_metrics(dm: app_api.DataManager)
     assert actual_orders == expected_orders
     assert actual_orders["Amazon Online Sale"] == 72113
     assert actual_orders["Flipkart Online Sale"] == 13386
+
+
+def test_top_products_volume_excludes_non_merchandise_names() -> None:
+    manager = build_manager(sample_non_merch_snapshot_frame())
+
+    volume = manager.top_products(manager.apply_filters({}), metric="volume", n=10)
+    revenue = manager.top_products(manager.apply_filters({}), metric="revenue", n=10)
+
+    assert [item["product"] for item in volume] == ["Bluewud Study Table"]
+    assert [item["product"] for item in revenue][:2] == ["Bluewud Study Table", "Minifix Housing 12x15"]
 
 
 def test_end_date_filter_is_inclusive(dm: app_api.DataManager) -> None:
