@@ -1266,7 +1266,7 @@ class DataManager:
         for source_type, source_value, loader in loaders:
             try:
                 raw_df, summary_sheet = loader(source_value)
-                processed = self._process_dataframe(raw_df)
+                processed = raw_df.copy() if source_type == "order_hub" else self._process_dataframe(raw_df)
                 self._set_loaded_state(processed, source_value, source_type, summary_sheet)
                 self._write_snapshot()
                 return True
