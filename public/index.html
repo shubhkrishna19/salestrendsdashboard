@@ -68,63 +68,36 @@ button,input,select{font:inherit}
   font-size:15px;
   line-height:1.6;
 }
-.app-footer{
-  padding:0 24px 28px;
-  border-top:1px solid rgba(212,197,173,.72);
-}
-.app-footer details{
-  background:rgba(245,236,221,.44);
-  border:1px solid rgba(212,197,173,.82);
-  border-radius:20px;
-  padding:0 18px 18px;
-}
-.footer-toggle{
-  list-style:none;
-  cursor:pointer;
+.utility-bar{
   display:flex;
+  justify-content:flex-end;
+  gap:10px;
+  flex-wrap:wrap;
+  padding:0 24px 14px;
+}
+.filters-actions{
+  display:flex;
+  justify-content:flex-end;
+  padding:0 24px 18px;
+}
+.utility-row{
+  display:flex;
+  flex-wrap:wrap;
   align-items:center;
   justify-content:space-between;
-  gap:12px;
-  padding:18px 0 12px;
-  color:var(--muted);
-  font-size:13px;
-  font-weight:700;
-  letter-spacing:.05em;
-  text-transform:uppercase;
+  gap:10px;
+  padding:0 24px 18px;
 }
-.footer-toggle::-webkit-details-marker{display:none}
-.footer-toggle::after{
-  content:"+";
-  font-size:20px;
-  line-height:1;
-  color:var(--accent);
+.utility-actions{
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+  justify-content:flex-end;
 }
-.app-footer details[open] .footer-toggle::after{content:"−"}
-.footer-grid{
-  display:grid;
-  grid-template-columns:repeat(3,minmax(0,1fr));
-  gap:14px;
-}
-.footer-meta-card{
-  background:rgba(255,250,241,.9);
-  border:1px solid var(--line);
-  border-radius:18px;
-  padding:16px;
-}
-.footer-meta-label{
-  display:block;
-  color:var(--muted);
-  font-size:11px;
-  text-transform:uppercase;
-  letter-spacing:.08em;
-  margin-bottom:8px;
-  font-weight:700;
-}
-.footer-meta-value{
-  font-size:14px;
-  line-height:1.55;
-  color:var(--ink);
-  word-break:break-word;
+.utility-summary{
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
 }
 .toolbar{
   display:grid;
@@ -132,7 +105,6 @@ button,input,select{font:inherit}
   gap:12px;
   padding:20px 24px 10px;
 }
-.toolbar.single{grid-template-columns:1fr}
 .action-cluster{
   display:grid;
   gap:10px;
@@ -192,30 +164,6 @@ button,input,select{font:inherit}
 .btn-primary{background:var(--accent);color:#f3efe7}
 .btn-secondary{background:var(--panel-strong);color:var(--ink);border:1px solid var(--line)}
 .btn-accent{background:var(--accent-2);color:#fff4ed}
-.filters-actions{
-  display:flex;
-  justify-content:flex-end;
-  padding:0 24px 18px;
-}
-.utility-row{
-  display:flex;
-  flex-wrap:wrap;
-  align-items:center;
-  justify-content:space-between;
-  gap:10px;
-  padding:0 24px 18px;
-}
-.utility-actions{
-  display:flex;
-  flex-wrap:wrap;
-  gap:10px;
-  justify-content:flex-end;
-}
-.utility-summary{
-  display:flex;
-  flex-wrap:wrap;
-  gap:10px;
-}
 .status-strip{
   display:flex;
   flex-wrap:wrap;
@@ -503,7 +451,9 @@ button,input,select{font:inherit}
   padding:24px;
   box-shadow:var(--shadow);
 }
-.modal-card.compact{width:min(680px,92vw)}
+.modal-card.compact{
+  width:min(680px,92vw);
+}
 .modal-card h2{margin:0 0 10px;font-size:24px;letter-spacing:-.03em}
 .modal-card p{margin:0 0 18px;color:var(--muted);line-height:1.6}
 .modal-grid{
@@ -511,7 +461,34 @@ button,input,select{font:inherit}
   grid-template-columns:repeat(2,minmax(0,1fr));
   gap:12px;
 }
-.modal-grid .btn{width:100%}
+.modal-grid .btn{
+  width:100%;
+}
+.runtime-grid{
+  display:grid;
+  gap:12px;
+}
+.runtime-card{
+  background:rgba(255,250,241,.9);
+  border:1px solid var(--line);
+  border-radius:18px;
+  padding:16px;
+}
+.runtime-label{
+  display:block;
+  color:var(--muted);
+  font-size:11px;
+  text-transform:uppercase;
+  letter-spacing:.08em;
+  margin-bottom:8px;
+  font-weight:700;
+}
+.runtime-value{
+  font-size:14px;
+  line-height:1.55;
+  color:var(--ink);
+  word-break:break-word;
+}
 .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}
 @media (max-width:1180px){
   .toolbar{grid-template-columns:1fr}
@@ -519,18 +496,15 @@ button,input,select{font:inherit}
   .grid.two,.grid.equal,.grid.triple,.grid.product-top,.summary-cards,.grid.overview-top{grid-template-columns:1fr 1fr}
   .kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .insight-list{grid-template-columns:1fr}
-  .footer-grid{grid-template-columns:1fr 1fr}
   .grid.product-top .card:last-child{grid-column:auto}
   .modal-grid{grid-template-columns:1fr}
 }
 @media (max-width:760px){
   .page{padding:12px}
   .shell{border-radius:24px}
-  .hero,.toolbar,.content,.tabs,.filters,.status-strip,.filters-actions,.utility-row{padding-left:16px;padding-right:16px}
+  .hero,.toolbar,.content,.tabs,.filters,.status-strip,.utility-bar,.filters-actions,.utility-row{padding-left:16px;padding-right:16px}
   .filters{grid-template-columns:1fr}
   .grid.two,.grid.equal,.grid.triple,.grid.product-top,.summary-cards,.kpi-grid,.grid.overview-top,.insight-list{grid-template-columns:1fr}
-  .footer-grid{grid-template-columns:1fr}
-  .app-footer{padding:0 16px 20px}
   .hero-copy h1{font-size:34px}
   .utility-actions{width:100%;justify-content:flex-start}
   .filters-actions{justify-content:flex-start}
@@ -552,7 +526,7 @@ button,input,select{font:inherit}
 <div id="sourceModal" class="modal">
   <div class="modal-card compact">
     <h2>Data Source Controls</h2>
-    <p>Choose the order-history source for this session, or load another workbook only when you need to inspect a different dataset.</p>
+    <p>Load the CRM snapshot, refresh the current source, reset back to defaults, or paste a workbook URL override.</p>
     <div class="modal-grid">
       <button class="btn btn-secondary" onclick="loadOrderHubSource()">Load CRM Order History</button>
       <button class="btn btn-secondary" onclick="reloadCurrentSource()">Refresh Current Source</button>
@@ -569,8 +543,12 @@ button,input,select{font:inherit}
         <button class="btn btn-primary" onclick="applySourceUrl()">Load Source</button>
       </div>
     </div>
+    <div class="field">
+      <div class="runtime-label">Source note</div>
+      <div class="runtime-value">The override is optional. Use the preset actions for the normal source chain, then switch to a direct workbook URL only when needed.</div>
+    </div>
     <div class="modal-actions">
-      <button class="btn btn-secondary" onclick="closeSourceModal()">Close</button>
+      <button class="btn btn-secondary" onclick="closeSourceModal()">Cancel</button>
     </div>
   </div>
 </div>
@@ -579,42 +557,42 @@ button,input,select{font:inherit}
   <div class="modal-card compact">
     <h2>Data Status</h2>
     <p>Current source, loaded state, and the exact order range being used for the dashboard right now.</p>
-    <div class="footer-grid">
-      <div class="footer-meta-card">
-        <span class="footer-meta-label">Loaded State</span>
-        <div id="metaLoaded" class="footer-meta-value">Checking health...</div>
+    <div class="runtime-grid">
+      <div class="runtime-card">
+        <span class="runtime-label">Loaded State</span>
+        <div id="metaLoaded" class="runtime-value">Checking health...</div>
       </div>
-      <div class="footer-meta-card">
-        <span class="footer-meta-label">Data Source</span>
-        <div id="metaSource" class="footer-meta-value">Loading...</div>
+      <div class="runtime-card">
+        <span class="runtime-label">Data Source</span>
+        <div id="metaSource" class="runtime-value">Loading...</div>
       </div>
-      <div class="footer-meta-card">
-        <span class="footer-meta-label">Snapshot Path</span>
-        <div class="footer-meta-value">Fast runtime path enabled for repeated filtering and future Vercel/AppSail deployment.</div>
+      <div class="runtime-card">
+        <span class="runtime-label">Snapshot Path</span>
+        <div class="runtime-value">Fast runtime path enabled for repeated filtering and future Vercel/AppSail deployment.</div>
       </div>
-      <div class="footer-meta-card">
-        <span class="footer-meta-label">Full Dataset Date Range</span>
-        <div id="statusRange" class="footer-meta-value">--</div>
+      <div class="runtime-card">
+        <span class="runtime-label">Full Dataset Date Range</span>
+        <div id="statusRange" class="runtime-value">--</div>
       </div>
-      <div class="footer-meta-card">
-        <span class="footer-meta-label">Current Selection Range</span>
-        <div id="statusSelectedRange" class="footer-meta-value">--</div>
+      <div class="runtime-card">
+        <span class="runtime-label">Current Selection Range</span>
+        <div id="statusSelectedRange" class="runtime-value">--</div>
       </div>
-      <div class="footer-meta-card">
-        <span class="footer-meta-label">Rows</span>
-        <div id="statusRows" class="footer-meta-value">--</div>
+      <div class="runtime-card">
+        <span class="runtime-label">Rows</span>
+        <div id="statusRows" class="runtime-value">--</div>
       </div>
-      <div class="footer-meta-card">
-        <span class="footer-meta-label">Unique Orders</span>
-        <div id="statusOrders" class="footer-meta-value">--</div>
+      <div class="runtime-card">
+        <span class="runtime-label">Unique Orders</span>
+        <div id="statusOrders" class="runtime-value">--</div>
       </div>
-      <div class="footer-meta-card">
-        <span class="footer-meta-label">Trend Mode</span>
-        <div id="statusFrequency" class="footer-meta-value">--</div>
+      <div class="runtime-card">
+        <span class="runtime-label">Trend Mode</span>
+        <div id="statusFrequency" class="runtime-value">--</div>
       </div>
-      <div class="footer-meta-card">
-        <span class="footer-meta-label">Loaded At</span>
-        <div id="statusLoadedAt" class="footer-meta-value">--</div>
+      <div class="runtime-card">
+        <span class="runtime-label">Loaded At</span>
+        <div id="statusLoadedAt" class="runtime-value">--</div>
       </div>
     </div>
     <div class="modal-actions">
@@ -628,9 +606,7 @@ button,input,select{font:inherit}
     <section class="hero">
       <div class="hero-copy">
         <h1>Sales Trends Dashboard</h1>
-        <p>
-          Internal analytics for revenue, returns, platform mix, budget tracking, and operational patterns.
-        </p>
+        <p>Internal analytics for revenue, returns, platform mix, budget tracking, and operational patterns.</p>
       </div>
     </section>
 
@@ -677,12 +653,6 @@ button,input,select{font:inherit}
       </div>
     </div>
 
-    <div class="utility-row">
-      <div class="utility-summary">
-        <div class="pill"><span class="dot" id="statusDot"></span><span id="statusText">Checking data health...</span></div>
-      </div>
-    </div>
-
     <div class="tabs">
       <button class="tab active" data-tab="overview" onclick="switchTab('overview')">Overview</button>
       <button class="tab" data-tab="channels" onclick="switchTab('channels')">Channels</button>
@@ -690,6 +660,12 @@ button,input,select{font:inherit}
       <button class="tab" data-tab="returns" onclick="switchTab('returns')">Returns</button>
       <button class="tab" data-tab="operations" onclick="switchTab('operations')">Operations</button>
       <button class="tab" data-tab="fy" onclick="switchTab('fy')">FY Lens</button>
+    </div>
+
+    <div class="utility-row">
+      <div class="utility-summary">
+        <div class="pill"><span class="dot" id="statusDot"></span><span id="statusText">Checking data health...</span></div>
+      </div>
     </div>
 
     <div class="content">
@@ -983,6 +959,30 @@ async function fetchJson(path, options) {
   return response.json();
 }
 
+function replaceOptions(selectEl, defaultLabel, items, mapper) {
+  selectEl.replaceChildren();
+  const defaultOption = document.createElement("option");
+  defaultOption.value = "";
+  defaultOption.textContent = defaultLabel;
+  selectEl.appendChild(defaultOption);
+  (items || []).forEach((item) => {
+    const mapped = mapper(item);
+    const option = document.createElement("option");
+    option.value = mapped.value;
+    option.textContent = mapped.label;
+    selectEl.appendChild(option);
+  });
+}
+
+function replaceDatalistOptions(listEl, items) {
+  listEl.replaceChildren();
+  (items || []).forEach((item) => {
+    const option = document.createElement("option");
+    option.value = item;
+    listEl.appendChild(option);
+  });
+}
+
 function currentFilters() {
   return {
     platform: document.getElementById("filterPlatform").value || "",
@@ -1089,21 +1089,27 @@ function populateFilters(meta) {
   const platformEl = document.getElementById("filterPlatform");
   const categoryEl = document.getElementById("filterCategory");
   const trendModeEl = document.getElementById("filterTrendMode");
-  platformEl.innerHTML = '<option value="">All platforms</option>';
-  categoryEl.innerHTML = '<option value="">All categories</option>';
-  trendModeEl.innerHTML = (meta.trend_modes || [
+  replaceOptions(platformEl, "All platforms", meta.platforms || [], (platform) => ({
+    value: platform.value,
+    label: `${platform.label} (${platform.value})`,
+  }));
+  replaceOptions(categoryEl, "All categories", meta.categories || [], (category) => ({
+    value: category,
+    label: category,
+  }));
+  trendModeEl.replaceChildren();
+  (meta.trend_modes || [
     { value: "auto", label: "Auto" },
     { value: "daily", label: "Daily" },
     { value: "weekly", label: "Weekly" },
     { value: "monthly", label: "Monthly" },
-  ]).map((mode) => `<option value="${mode.value}">${mode.label}</option>`).join("");
-
-  (meta.platforms || []).forEach((platform) => {
-    platformEl.innerHTML += `<option value="${platform.value}">${platform.label} (${platform.value})</option>`;
+  ]).forEach((mode) => {
+    const option = document.createElement("option");
+    option.value = mode.value;
+    option.textContent = mode.label;
+    trendModeEl.appendChild(option);
   });
-  (meta.categories || []).forEach((category) => {
-    categoryEl.innerHTML += `<option value="${category}">${category}</option>`;
-  });
+  replaceDatalistOptions(document.getElementById("productList"), meta.product_suggestions || []);
 
   if (meta.date_range) {
     document.getElementById("filterStart").min = meta.date_range.min;
@@ -1629,8 +1635,7 @@ async function loadDashboard(options = {}) {
 async function refreshProductSuggestions() {
   const query = document.getElementById("filterProduct").value.trim();
   if (query.length < 2) {
-    document.getElementById("productList").innerHTML = "";
-    return;
+    replaceDatalistOptions(document.getElementById("productList"), state.filtersMeta?.product_suggestions || []);
   }
   const filters = currentFilters();
   const params = new URLSearchParams();
@@ -1640,7 +1645,7 @@ async function refreshProductSuggestions() {
   if (filters.start_date) params.set("start_date", filters.start_date);
   if (filters.end_date) params.set("end_date", filters.end_date);
   const data = await fetchJson("/api/search/products?" + params.toString());
-  document.getElementById("productList").innerHTML = (data.items || []).map((item) => `<option value="${item}"></option>`).join("");
+  replaceDatalistOptions(document.getElementById("productList"), data.items || []);
 }
 
 function queueProductSuggestions() {
@@ -1655,7 +1660,7 @@ function resetFilters() {
   document.getElementById("filterCategory").value = "";
   document.getElementById("filterProduct").value = "";
   document.getElementById("filterTrendMode").value = state.filtersMeta?.default_trend_mode || "auto";
-  document.getElementById("productList").innerHTML = "";
+  replaceDatalistOptions(document.getElementById("productList"), state.filtersMeta?.product_suggestions || []);
   if (state.filtersMeta && state.filtersMeta.date_range) {
     document.getElementById("filterStart").value = state.filtersMeta.date_range.min;
     document.getElementById("filterEnd").value = state.filtersMeta.date_range.max;
@@ -1770,6 +1775,14 @@ async function boot() {
   showLoader("Preparing Sales Trends Dashboard...");
   try {
     document.getElementById("filterProduct").addEventListener("input", queueProductSuggestions);
+    document.getElementById("filterProduct").addEventListener("focus", () => {
+      refreshProductSuggestions().catch((error) => console.warn("product search", error));
+    });
+    ["filterPlatform", "filterCategory", "filterStart", "filterEnd"].forEach((id) => {
+      document.getElementById(id).addEventListener("change", () => {
+        refreshProductSuggestions().catch((error) => console.warn("product search", error));
+      });
+    });
     const cached = readCache();
     const restored = restoreCachedView();
     const latestHealth = await loadHealth();

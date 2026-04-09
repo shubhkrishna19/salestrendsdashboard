@@ -193,6 +193,24 @@ SUMMARY_SECTION_KEYS = [
     "insights",
 ]
 
+ZOHO_TABLE_NAMES = (
+    "fact_sales_lines",
+    "dim_products",
+    "dim_platforms",
+    "fact_fy_monthly_rollup",
+    "fact_budget_tracker_monthly",
+    "fact_strategic_observations",
+)
+
+ZOHO_TABLE_FILENAMES = {
+    "fact_sales_lines": "fact_sales_lines.csv",
+    "dim_products": "dim_products.csv",
+    "dim_platforms": "dim_platforms.csv",
+    "fact_fy_monthly_rollup": "fact_fy_monthly_rollup.csv",
+    "fact_budget_tracker_monthly": "fact_budget_tracker_monthly.csv",
+    "fact_strategic_observations": "fact_strategic_observations.csv",
+}
+
 FISCAL_MONTH_NAMES = [
     "April",
     "May",
@@ -434,6 +452,21 @@ def derive_sku_extension(value: Any, base_sku: Any) -> str:
         return ""
     prefix = base + "-"
     return sku[len(prefix) :] if sku.startswith(prefix) else ""
+
+
+def derive_zoho_sku_family(value: Any) -> str:
+    sku = clean_text(value, "Unknown SKU")
+    if sku == "Unknown SKU":
+        return sku
+
+    parts = [part.strip() for part in sku.split("-") if part.strip()]
+    if len(parts) <= 2:
+        return sku
+
+    tail = parts[-1]
+    if len(tail) <= 3 and re.fullmatch(r"[A-Za-z0-9]+", tail):
+        return "-".join(parts[:-1])
+    return sku
 
 
 def search_rank(value: Any, query: str, exact_bonus: int = 0) -> int:
@@ -723,6 +756,7 @@ class DataManager:
                 for mode in TREND_MODE_OPTIONS
             ],
             "default_trend_mode": "auto",
+            "product_suggestions": self.product_options({}, limit=80),
         }
         if not date_series.empty:
             out["date_range"] = {
@@ -1656,9 +1690,38 @@ class DataManager:
 
         return df
 
-    def search_products(self, filters: Dict[str, Any], query: str, limit: int = 20) -> List[str]:
-        if not self.ready or not query.strip():
+    def product_options(self, filters: Optional[Dict[str, Any]] = None, limit: int = 50) -> List[str]:
+        if not self.ready:
             return []
+
+        scoped_df = self.apply_filters(filters or {})
+        if scoped_df.empty:
+            return []
+
+        ranked = (
+            scoped_df.groupby("product", observed=True)
+            .agg(
+                orders=("order_id", "nunique"),
+                net_revenue=("net_revenue", "sum"),
+            )
+            .reset_index()
+        )
+        ranked = ranked[~ranked["product"].apply(is_non_merch_product)]
+        ranked["product"] = ranked["product"].apply(lambda value: clean_text(value, ""))
+        ranked = ranked[ranked["product"] != ""]
+        ranked = ranked[(ranked["orders"] > 0) | (ranked["net_revenue"] != 0)]
+        ranked = ranked.sort_values(
+            ["orders", "net_revenue", "product"],
+            ascending=[False, False, True],
+            kind="mergesort",
+        )
+        return ranked["product"].drop_duplicates().head(limit).tolist()
+
+    def search_products(self, filters: Dict[str, Any], query: str, limit: int = 20) -> List[str]:
+        if not self.ready:
+            return []
+        if not query.strip():
+            return self.product_options(filters, limit=limit)
         search_filters = dict(filters)
         search_filters["product_query"] = query.strip()
         df = self.apply_filters(search_filters)
@@ -2279,6 +2342,337 @@ class DataManager:
         export_frame["order_date"] = export_frame["order_date"].dt.strftime("%Y-%m-%d")
         return export_frame.to_csv(index=False)
 
+    def zoho_export_frames(self) -> Dict[str, pd.DataFrame]:
+        if not self.ready:
+            return {
+                "fact_sales_lines": pd.DataFrame(),
+                "dim_products": pd.DataFrame(),
+                "dim_platforms": pd.DataFrame(),
+                "fact_fy_monthly_rollup": pd.DataFrame(),
+                "fact_budget_tracker_monthly": pd.DataFrame(),
+                "fact_strategic_observations": pd.DataFrame(),
+            }
+
+        fact_sales_lines = self._zoho_fact_sales_lines()
+        summary = self.summary_sheet()
+        return {
+            "fact_sales_lines": fact_sales_lines,
+            "dim_products": self._zoho_dim_products(fact_sales_lines),
+            "dim_platforms": self._zoho_dim_platforms(fact_sales_lines),
+            "fact_fy_monthly_rollup": self._zoho_fact_fy_monthly_rollup(summary),
+            "fact_budget_tracker_monthly": self._zoho_fact_budget_tracker_monthly(summary),
+            "fact_strategic_observations": self._zoho_fact_strategic_observations(summary),
+        }
+
+    def zoho_table_csv(self, table_name: str) -> str:
+        frames = self.zoho_export_frames()
+        if table_name not in frames:
+            raise KeyError(table_name)
+        return frames[table_name].to_csv(index=False)
+
+    def zoho_workspace_manifest(self) -> Dict[str, Any]:
+        frames = self.zoho_export_frames()
+        health = self.health()
+        summary_meta = self.summary_sheet().get("meta", {}) if self.ready else {}
+        tables: List[Dict[str, Any]] = []
+        for table_name in ZOHO_TABLE_NAMES:
+            frame = frames.get(table_name, pd.DataFrame())
+            tables.append(
+                {
+                    "name": table_name,
+                    "file_name": ZOHO_TABLE_FILENAMES[table_name],
+                    "rows": int(len(frame.index)),
+                    "columns": frame.columns.tolist(),
+                    "recommended_import": "replace",
+                    "empty": frame.empty,
+                }
+            )
+
+        return {
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "source": self._source,
+            "source_type": self._source_type,
+            "rows": health.get("rows", 0),
+            "unique_orders": health.get("unique_orders", 0),
+            "summary_mode": summary_meta.get("mode", "computed"),
+            "budget_available": bool(summary_meta.get("budget_available")),
+            "tables": tables,
+            "lookups": [
+                {
+                    "from_table": "fact_sales_lines",
+                    "from_column": "platform_raw",
+                    "to_table": "dim_platforms",
+                    "to_column": "platform_raw",
+                },
+                {
+                    "from_table": "fact_sales_lines",
+                    "from_column": "product_key",
+                    "to_table": "dim_products",
+                    "to_column": "product_key",
+                },
+            ],
+            "dashboard_mapping": [
+                {
+                    "section": "Overview",
+                    "primary_tables": ["fact_sales_lines", "dim_platforms"],
+                    "notes": "Drive KPI widgets, revenue trend, platform share, and category mix from fact_sales_lines.",
+                },
+                {
+                    "section": "Products",
+                    "primary_tables": ["fact_sales_lines", "dim_products"],
+                    "notes": "Use dim_products for search-friendly fields and fact_sales_lines for leaderboard metrics.",
+                },
+                {
+                    "section": "Returns",
+                    "primary_tables": ["fact_sales_lines"],
+                    "notes": "Keep signed return math exactly as exported; build value and quantity views in Analytics.",
+                },
+                {
+                    "section": "Operations",
+                    "primary_tables": ["fact_sales_lines", "dim_platforms"],
+                    "notes": "Month, weekday, channel quality, and return-risk reports can stay fully Analytics-native.",
+                },
+                {
+                    "section": "FY Lens",
+                    "primary_tables": ["fact_fy_monthly_rollup", "fact_budget_tracker_monthly", "fact_strategic_observations"],
+                    "notes": "Use the summary-derived exports for workbook parity while the Zoho layer is being validated.",
+                },
+            ],
+        }
+
+    def _zoho_fact_sales_lines(self) -> pd.DataFrame:
+        base = self._ensure_search_dimensions(self._df).copy()
+        order_dates = pd.to_datetime(base["order_date"], errors="coerce")
+        sku_family = base["sku"].apply(derive_zoho_sku_family)
+
+        export_frame = pd.DataFrame()
+        export_frame["sales_line_key"] = (
+            pd.util.hash_pandas_object(
+                base[
+                    [
+                        "order_date",
+                        "platform_raw",
+                        "category",
+                        "product",
+                        "sku",
+                        "gross_sales",
+                        "return_value_signed",
+                        "order_id",
+                    ]
+                ].fillna(""),
+                index=False,
+            )
+            .astype("uint64")
+            .astype(str)
+        )
+        export_frame["product_key"] = (
+            pd.util.hash_pandas_object(
+                pd.DataFrame({"sku_family": sku_family, "category": base["category"]}).fillna(""),
+                index=False,
+            )
+            .astype("uint64")
+            .astype(str)
+        )
+        export_frame["order_id"] = base["order_id"].fillna("")
+        export_frame["order_date"] = order_dates.dt.strftime("%Y-%m-%d").fillna("")
+        export_frame["calendar_year"] = order_dates.dt.year.astype("Int64")
+        export_frame["calendar_month_number"] = order_dates.dt.month.astype("Int64")
+        export_frame["calendar_month_key"] = base["month"]
+        export_frame["calendar_month_label"] = order_dates.dt.strftime("%b %Y").fillna("Unknown")
+        export_frame["fiscal_year"] = base["fy"]
+        export_frame["fiscal_month_name"] = order_dates.apply(fiscal_month_name)
+        export_frame["fiscal_month_index"] = export_frame["fiscal_month_name"].map(FISCAL_MONTH_INDEX).astype("Int64")
+        export_frame["weekday"] = base["weekday"]
+        export_frame["platform_raw"] = base["platform_raw"]
+        export_frame["platform_label"] = base["platform_label"]
+        export_frame["category"] = base["category"]
+        export_frame["product_name"] = base["product"]
+        export_frame["sku_raw"] = base["sku"]
+        export_frame["sku_base"] = base["sku_base"]
+        export_frame["sku_family"] = sku_family
+        export_frame["sku_extension"] = base["sku_extension"]
+        export_frame["product_search_text"] = base["product_search_text"]
+        export_frame["product_search_compact"] = base["product_search_compact"]
+        export_frame["sku_search_text"] = base["sku_search_text"]
+        export_frame["sku_search_compact"] = base["sku_search_compact"]
+        export_frame["sku_base_search_text"] = base["sku_base_search_text"]
+        export_frame["sku_base_search_compact"] = base["sku_base_search_compact"]
+        export_frame["sku_family_search_text"] = sku_family.apply(normalize_search_text)
+        export_frame["sku_family_search_compact"] = sku_family.apply(compact_search_text)
+        export_frame["sale_qty"] = base["sale_qty"]
+        export_frame["return_qty_signed"] = base["return_qty_signed"]
+        export_frame["return_qty"] = base["return_qty"]
+        export_frame["net_qty"] = base["net_qty"]
+        export_frame["gross_sales"] = base["gross_sales"]
+        export_frame["return_value_signed"] = base["return_value_signed"]
+        export_frame["return_value"] = base["return_value"]
+        export_frame["net_revenue"] = base["net_revenue"]
+        export_frame["tax"] = base["tax"]
+        export_frame["return_reason"] = base["return_reason"]
+        export_frame["return_validity"] = base["return_validity"]
+        export_frame["has_returns"] = ((base["return_value"] > 0) | (base["return_qty"] > 0)).astype(int)
+        export_frame["is_return_only"] = ((base["sale_qty"] <= 0) & (base["return_value"] > 0)).astype(int)
+        export_frame["is_non_merchandise"] = base["product"].apply(is_non_merch_product).astype(int)
+        return export_frame
+
+    def _zoho_dim_products(self, fact_sales_lines: pd.DataFrame) -> pd.DataFrame:
+        if fact_sales_lines.empty:
+            return pd.DataFrame()
+
+        products = (
+            fact_sales_lines.groupby(["product_key", "sku_family"], observed=True)
+            .agg(
+                product_name=("product_name", lambda values: values.mode().iat[0] if not values.mode().empty else values.iloc[0]),
+                category=("category", lambda values: values.mode().iat[0] if not values.mode().empty else values.iloc[0]),
+                sku_variants=("sku_raw", lambda values: sorted({value for value in values if clean_text(value, "")})),
+                sku_extensions=("sku_extension", lambda values: sorted({value for value in values if clean_text(value, "")})),
+                orders=("order_id", lambda values: int(pd.Series(values, dtype="object").where(lambda series: series != "", np.nan).dropna().nunique())),
+                net_revenue=("net_revenue", "sum"),
+                gross_sales=("gross_sales", "sum"),
+                return_value=("return_value", "sum"),
+                has_non_merchandise_rows=("is_non_merchandise", "max"),
+            )
+            .reset_index()
+        )
+        products["sku_variant_count"] = products["sku_variants"].apply(len)
+        products["sku_variants"] = products["sku_variants"].apply(lambda values: " | ".join(values))
+        products["sku_extensions"] = products["sku_extensions"].apply(lambda values: " | ".join(values))
+        products["product_search_text"] = products["product_name"].apply(normalize_search_text)
+        products["product_search_compact"] = products["product_name"].apply(compact_search_text)
+        products["sku_family_search_text"] = products["sku_family"].apply(normalize_search_text)
+        products["sku_family_search_compact"] = products["sku_family"].apply(compact_search_text)
+        return products[
+            [
+                "product_key",
+                "product_name",
+                "sku_family",
+                "category",
+                "sku_variant_count",
+                "sku_variants",
+                "sku_extensions",
+                "orders",
+                "gross_sales",
+                "return_value",
+                "net_revenue",
+                "has_non_merchandise_rows",
+                "product_search_text",
+                "product_search_compact",
+                "sku_family_search_text",
+                "sku_family_search_compact",
+            ]
+        ]
+
+    def _zoho_dim_platforms(self, fact_sales_lines: pd.DataFrame) -> pd.DataFrame:
+        if fact_sales_lines.empty:
+            return pd.DataFrame()
+
+        platforms = (
+            fact_sales_lines.groupby(["platform_raw", "platform_label"], observed=True)
+            .agg(
+                orders=("order_id", lambda values: int(pd.Series(values, dtype="object").where(lambda series: series != "", np.nan).dropna().nunique())),
+                gross_sales=("gross_sales", "sum"),
+                return_value=("return_value", "sum"),
+                net_revenue=("net_revenue", "sum"),
+                net_qty=("net_qty", "sum"),
+            )
+            .reset_index()
+            .sort_values(["net_revenue", "platform_label"], ascending=[False, True])
+        )
+        platforms["platform_color"] = platforms["platform_raw"].map(PLATFORM_COLORS).fillna("#64748B")
+        platforms["return_rate_value"] = (
+            platforms.apply(
+                lambda row: safe_divide(row["return_value"], row["gross_sales"]) or 0.0,
+                axis=1,
+            )
+        )
+        return platforms[
+            [
+                "platform_raw",
+                "platform_label",
+                "platform_color",
+                "orders",
+                "gross_sales",
+                "return_value",
+                "net_revenue",
+                "net_qty",
+                "return_rate_value",
+            ]
+        ]
+
+    def _zoho_fact_fy_monthly_rollup(self, summary: Dict[str, Any]) -> pd.DataFrame:
+        rows: List[Dict[str, Any]] = []
+        for row in summary.get("monthly_fy_sales", []):
+            month = clean_text(row.get("month"), "")
+            if not month:
+                continue
+            month_index = FISCAL_MONTH_INDEX.get(month)
+            for key, value in row.items():
+                if key == "month" or not has_value(value):
+                    continue
+                if key.startswith("fy_"):
+                    rows.append(
+                        {
+                            "month": month,
+                            "fiscal_month_index": month_index,
+                            "series_key": key,
+                            "series_label": fy_key_to_label(key),
+                            "series_type": "actual",
+                            "amount": safe_float(value),
+                        }
+                    )
+                elif key.startswith("budget_"):
+                    budget_label = key.replace("budget_", "fy_")
+                    rows.append(
+                        {
+                            "month": month,
+                            "fiscal_month_index": month_index,
+                            "series_key": budget_label,
+                            "series_label": fy_key_to_label(budget_label),
+                            "series_type": "budget",
+                            "amount": safe_float(value),
+                        }
+                    )
+        return pd.DataFrame(rows)
+
+    def _zoho_fact_budget_tracker_monthly(self, summary: Dict[str, Any]) -> pd.DataFrame:
+        rows: List[Dict[str, Any]] = []
+        source_mode = summary.get("meta", {}).get("mode", "computed")
+        for row in summary.get("budget_vs_achievement", []):
+            month = clean_text(row.get("month"), "")
+            if not month:
+                continue
+            rows.append(
+                {
+                    "month": month,
+                    "fiscal_month_index": FISCAL_MONTH_INDEX.get(month),
+                    "budget": row.get("budget"),
+                    "actual": row.get("actual"),
+                    "variance": row.get("variance"),
+                    "achievement_pct": row.get("achievement_pct"),
+                    "yoy_change": row.get("yoy_change"),
+                    "cumulative_budget": row.get("cumulative_budget"),
+                    "cumulative_actual": row.get("cumulative_actual"),
+                    "source_mode": source_mode,
+                }
+            )
+        return pd.DataFrame(rows)
+
+    def _zoho_fact_strategic_observations(self, summary: Dict[str, Any]) -> pd.DataFrame:
+        rows: List[Dict[str, Any]] = []
+        source_mode = summary.get("meta", {}).get("mode", "computed")
+        for index, row in enumerate(summary.get("insights", []), start=1):
+            rows.append(
+                {
+                    "display_order": index,
+                    "title": clean_text(row.get("title"), ""),
+                    "metric": clean_text(row.get("metric"), ""),
+                    "body": clean_text(row.get("body"), ""),
+                    "note": clean_text(row.get("note"), ""),
+                    "source_mode": source_mode,
+                }
+            )
+        return pd.DataFrame(rows)
+
 
 _dm = DataManager()
 _cache = CacheManager(ttl_seconds=300)
@@ -2599,6 +2993,23 @@ async def get_dashboard(
 ) -> Dict[str, Any]:
     filters = parse_filters(platform, category, start_date, end_date, product, product_query, trend_mode)
     return cached_response("dashboard", filters, lambda: dashboard_payload(filters))
+
+
+@app.get("/api/zoho-analytics/manifest")
+async def get_zoho_analytics_manifest() -> Dict[str, Any]:
+    return _dm.zoho_workspace_manifest()
+
+
+@app.get("/api/zoho-analytics/tables/{table_name}")
+async def export_zoho_analytics_table(table_name: str) -> Response:
+    if table_name not in ZOHO_TABLE_NAMES:
+        raise HTTPException(status_code=404, detail="Unknown Zoho Analytics table.")
+    csv = _dm.zoho_table_csv(table_name)
+    return Response(
+        content=csv,
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={ZOHO_TABLE_FILENAMES[table_name]}"},
+    )
 
 
 @app.get("/api/export")

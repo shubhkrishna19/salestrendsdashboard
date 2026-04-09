@@ -959,6 +959,30 @@ async function fetchJson(path, options) {
   return response.json();
 }
 
+function replaceOptions(selectEl, defaultLabel, items, mapper) {
+  selectEl.replaceChildren();
+  const defaultOption = document.createElement("option");
+  defaultOption.value = "";
+  defaultOption.textContent = defaultLabel;
+  selectEl.appendChild(defaultOption);
+  (items || []).forEach((item) => {
+    const mapped = mapper(item);
+    const option = document.createElement("option");
+    option.value = mapped.value;
+    option.textContent = mapped.label;
+    selectEl.appendChild(option);
+  });
+}
+
+function replaceDatalistOptions(listEl, items) {
+  listEl.replaceChildren();
+  (items || []).forEach((item) => {
+    const option = document.createElement("option");
+    option.value = item;
+    listEl.appendChild(option);
+  });
+}
+
 function currentFilters() {
   return {
     platform: document.getElementById("filterPlatform").value || "",
@@ -1065,21 +1089,27 @@ function populateFilters(meta) {
   const platformEl = document.getElementById("filterPlatform");
   const categoryEl = document.getElementById("filterCategory");
   const trendModeEl = document.getElementById("filterTrendMode");
-  platformEl.innerHTML = '<option value="">All platforms</option>';
-  categoryEl.innerHTML = '<option value="">All categories</option>';
-  trendModeEl.innerHTML = (meta.trend_modes || [
+  replaceOptions(platformEl, "All platforms", meta.platforms || [], (platform) => ({
+    value: platform.value,
+    label: `${platform.label} (${platform.value})`,
+  }));
+  replaceOptions(categoryEl, "All categories", meta.categories || [], (category) => ({
+    value: category,
+    label: category,
+  }));
+  trendModeEl.replaceChildren();
+  (meta.trend_modes || [
     { value: "auto", label: "Auto" },
     { value: "daily", label: "Daily" },
     { value: "weekly", label: "Weekly" },
     { value: "monthly", label: "Monthly" },
-  ]).map((mode) => `<option value="${mode.value}">${mode.label}</option>`).join("");
-
-  (meta.platforms || []).forEach((platform) => {
-    platformEl.innerHTML += `<option value="${platform.value}">${platform.label} (${platform.value})</option>`;
+  ]).forEach((mode) => {
+    const option = document.createElement("option");
+    option.value = mode.value;
+    option.textContent = mode.label;
+    trendModeEl.appendChild(option);
   });
-  (meta.categories || []).forEach((category) => {
-    categoryEl.innerHTML += `<option value="${category}">${category}</option>`;
-  });
+  replaceDatalistOptions(document.getElementById("productList"), meta.product_suggestions || []);
 
   if (meta.date_range) {
     document.getElementById("filterStart").min = meta.date_range.min;
@@ -1605,8 +1635,7 @@ async function loadDashboard(options = {}) {
 async function refreshProductSuggestions() {
   const query = document.getElementById("filterProduct").value.trim();
   if (query.length < 2) {
-    document.getElementById("productList").innerHTML = "";
-    return;
+    replaceDatalistOptions(document.getElementById("productList"), state.filtersMeta?.product_suggestions || []);
   }
   const filters = currentFilters();
   const params = new URLSearchParams();
@@ -1616,7 +1645,7 @@ async function refreshProductSuggestions() {
   if (filters.start_date) params.set("start_date", filters.start_date);
   if (filters.end_date) params.set("end_date", filters.end_date);
   const data = await fetchJson("/api/search/products?" + params.toString());
-  document.getElementById("productList").innerHTML = (data.items || []).map((item) => `<option value="${item}"></option>`).join("");
+  replaceDatalistOptions(document.getElementById("productList"), data.items || []);
 }
 
 function queueProductSuggestions() {
@@ -1631,7 +1660,7 @@ function resetFilters() {
   document.getElementById("filterCategory").value = "";
   document.getElementById("filterProduct").value = "";
   document.getElementById("filterTrendMode").value = state.filtersMeta?.default_trend_mode || "auto";
-  document.getElementById("productList").innerHTML = "";
+  replaceDatalistOptions(document.getElementById("productList"), state.filtersMeta?.product_suggestions || []);
   if (state.filtersMeta && state.filtersMeta.date_range) {
     document.getElementById("filterStart").value = state.filtersMeta.date_range.min;
     document.getElementById("filterEnd").value = state.filtersMeta.date_range.max;
@@ -1746,6 +1775,14 @@ async function boot() {
   showLoader("Preparing Sales Trends Dashboard...");
   try {
     document.getElementById("filterProduct").addEventListener("input", queueProductSuggestions);
+    document.getElementById("filterProduct").addEventListener("focus", () => {
+      refreshProductSuggestions().catch((error) => console.warn("product search", error));
+    });
+    ["filterPlatform", "filterCategory", "filterStart", "filterEnd"].forEach((id) => {
+      document.getElementById(id).addEventListener("change", () => {
+        refreshProductSuggestions().catch((error) => console.warn("product search", error));
+      });
+    });
     const cached = readCache();
     const restored = restoreCachedView();
     const latestHealth = await loadHealth();

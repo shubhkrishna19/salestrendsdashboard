@@ -263,6 +263,56 @@ def build_manager(frame: pd.DataFrame, summary_sheet: dict | None = None) -> app
     return manager
 
 
+def sample_summary_sheet_payload() -> dict:
+    return {
+        "headline_cards": [
+            {"label": "Total revenue (FY 25-26)", "value": "₹1.50Cr"},
+        ],
+        "monthly_fy_sales": [
+            {"month": "April", "fy_2024_25": 700.0, "fy_2025_26": 1700.0, "budget_2025_26": 2000.0},
+            {"month": "March", "fy_2024_25": 1200.0, "fy_2025_26": 0.0, "budget_2025_26": 0.0},
+            {"month": "TOTAL", "fy_2024_25": 1900.0, "fy_2025_26": 1700.0, "budget_2025_26": 2000.0},
+        ],
+        "channel_performance_current": [],
+        "budget_vs_achievement": [
+            {
+                "month": "April",
+                "budget": 2000.0,
+                "actual": 1700.0,
+                "variance": -300.0,
+                "achievement_pct": 0.85,
+                "yoy_change": 1.42857,
+                "cumulative_budget": 2000.0,
+                "cumulative_actual": 1700.0,
+            },
+            {
+                "month": "TOTAL",
+                "budget": 2000.0,
+                "actual": 1700.0,
+                "variance": -300.0,
+                "achievement_pct": 0.85,
+                "yoy_change": -0.10526,
+                "cumulative_budget": 2000.0,
+                "cumulative_actual": 1700.0,
+            },
+        ],
+        "rto_monthly_current": [],
+        "channel_growth": [],
+        "insights": [
+            {
+                "title": "Budget watch",
+                "metric": "85.0%",
+                "body": "April closed below target but ahead of prior year.",
+                "note": "Use this in the FY Lens narrative rail.",
+            }
+        ],
+        "meta": {
+            "mode": "workbook",
+            "budget_available": True,
+        },
+    }
+
+
 @pytest.fixture(scope="session")
 def dm() -> app_api.DataManager:
     return app_api._dm
@@ -531,6 +581,18 @@ def test_search_products_returns_sku_and_product_suggestions() -> None:
     }.issubset(set(product_suggestions))
 
 
+def test_search_products_without_query_returns_preloaded_product_suggestions() -> None:
+    manager = build_manager(sample_sku_search_snapshot_frame(), summary_sheet={})
+
+    suggestions = manager.search_products({}, "", limit=10)
+
+    assert suggestions[:2] == [
+        "Bluewud Corbyn L Shape Study Ta-Maple-CL",
+        "Bluewud Corbyn L Shape Study Table-Maple",
+    ]
+    assert "Bluewud Kaspen Shoe Rack Maple (MF)" in suggestions
+
+
 def test_local_workbook_summary_sheet_parses_expected_shape() -> None:
     workbook_path = Path(__file__).resolve().parents[1] / "data.xlsx"
     sheet = app_api.read_excel_quietly(workbook_path, sheet_name=app_api.SUMMARY_SHEET_NAME, header=None)
@@ -605,10 +667,12 @@ def test_canonical_platform_raw_maps_invalid_values_to_misc() -> None:
 def test_filter_options_hide_empty_unknown_platforms() -> None:
     manager = build_manager(sample_invalid_platform_snapshot_frame(), summary_sheet={})
 
-    platforms = manager.filter_options()["platforms"]
+    filter_options = manager.filter_options()
+    platforms = filter_options["platforms"]
 
     assert [row["value"] for row in platforms] == ["Amazon Online Sale", "Misc"]
     assert [row["label"] for row in platforms] == ["Amazon", "Misc"]
+    assert filter_options["product_suggestions"] == ["Alpha Bed", "Beta Bed"]
 
 
 def test_order_hub_snapshot_loader_rejects_missing_required_columns(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -885,3 +949,60 @@ def test_url_normalization_helpers() -> None:
         == "https://docs.google.com/spreadsheets/d/abc123XYZ/export?format=xlsx&gid=123456"
     )
     assert app_api.normalize_data_url(sharepoint_url).endswith("&download=1")
+
+
+def test_zoho_export_frames_include_search_ready_sales_dimensions() -> None:
+    manager = build_manager(sample_sku_search_snapshot_frame())
+
+    frames = manager.zoho_export_frames()
+
+    assert set(frames) == set(app_api.ZOHO_TABLE_NAMES)
+    fact_sales = frames["fact_sales_lines"]
+    product_dim = frames["dim_products"]
+    platform_dim = frames["dim_platforms"]
+
+    assert not fact_sales.empty
+    assert fact_sales["sales_line_key"].nunique() == len(fact_sales.index)
+    assert "sku_base_search_compact" in fact_sales.columns
+    assert set(fact_sales["sku_family"]) == {"ST-CBN-LSMF", "SR-KPN"}
+    assert "ST-CBN-LSMF-CL" in product_dim.loc[product_dim["sku_family"] == "ST-CBN-LSMF", "sku_variants"].iat[0]
+    assert set(platform_dim["platform_label"]) == {"Amazon", "Flipkart"}
+
+
+def test_zoho_summary_exports_use_workbook_summary_when_available() -> None:
+    manager = build_manager(sample_fy_snapshot_frame(), sample_summary_sheet_payload())
+
+    frames = manager.zoho_export_frames()
+    fy_rollup = frames["fact_fy_monthly_rollup"]
+    budget_tracker = frames["fact_budget_tracker_monthly"]
+    observations = frames["fact_strategic_observations"]
+
+    april_budget = fy_rollup[
+        (fy_rollup["month"] == "April")
+        & (fy_rollup["series_key"] == "fy_2025_26")
+        & (fy_rollup["series_type"] == "budget")
+    ]
+
+    assert not april_budget.empty
+    assert april_budget["amount"].iat[0] == pytest.approx(2000.0)
+    assert budget_tracker.loc[budget_tracker["month"] == "April", "source_mode"].iat[0] == "workbook"
+    assert observations.loc[0, "title"] == "Budget watch"
+
+
+def test_zoho_manifest_endpoint_returns_workspace_definition(client: TestClient) -> None:
+    response = client.get("/api/zoho-analytics/manifest")
+
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["rows"] == 151770
+    assert payload["unique_orders"] == 107748
+    assert {table["name"] for table in payload["tables"]} == set(app_api.ZOHO_TABLE_NAMES)
+
+
+def test_zoho_table_export_endpoint_returns_csv(client: TestClient) -> None:
+    response = client.get("/api/zoho-analytics/tables/dim_platforms")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/csv")
+    assert "platform_raw,platform_label" in response.text
